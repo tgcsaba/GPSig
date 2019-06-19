@@ -13,3 +13,7 @@ The GP models, that can be considered re-implementations of the models in GPflow
 The other files, *preprocessing.py*, *training.py*, *optimizers.py* contain convenience functins that are used for preprocessing the data, training models and importing optimizers from tf.contrib. See *notebooks/mts_exampl1.ipynb* for their usage.
 
 Stay tuned for more examples and notebooks.
+
+## Dependencies
+
+The package dependencies that the library was tested with are available in the *requirements.txt* text file. 
