@@ -158,7 +158,12 @@ def add_time_to_table(ts_table, num_features = 1):
     Output:
     :ts_table_with_time:  A table of tabulated time-series of size (num_paths, (num_features + 1) * max_length)
     """
+    ndim_format = ts_table.ndim == 3
+    if ndim_format:
+        ts_table = ts_table.reshape([ts_table.shape[0], -1])
     ts_table_with_time = np.apply_along_axis(lambda series: add_time_to_path(series, num_features), 1, ts_table)
+    if ndim_format:
+        ts_table_with_time = ts_table_with_time.reshape([ts_table_with_time.shape[0], -1, num_features + 1])
     return ts_table_with_time
 
 def add_time_to_list(ts_list, num_features = 1, len_max = None):
