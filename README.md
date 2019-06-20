@@ -1,6 +1,6 @@
 # GPSig
 A Variational Gaussian process classifier for streams; see [https://arxiv.org/abs/1906.08215] for background.
-For a quick demonstration for multi-variate timeseries classification see *notebooks/mts_exampl1.ipynb*.
+For a quick demonstration for multi-variate timeseries classification see [https://github.com/tgcsaba/GPSig/blob/master/notebooks/mts_example1.ipynb].
 
 ## Overview
 The repository contains the source code for VGP models using signature covariances for supervised learning.
