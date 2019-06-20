@@ -1,6 +1,5 @@
 # GPSig
-A Variational Gaussian process classifier for streams such as multi-variate times series, as introduced in [https://arxiv.org/abs/1906.08215]
-
+A Variational Gaussian process classifier for streams; see [https://arxiv.org/abs/1906.08215] for background.
 For a quick demonstration for multi-variate timeseries classification see *notebooks/mts_exampl1.ipynb*.
 
 ## Overview
