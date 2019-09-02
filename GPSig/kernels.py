@@ -56,7 +56,7 @@ class Sequential(Kernel):
 
         
         variances, self.ARD = self._validate_sequential_ard_params("variances", variances, num_levels + 1, ARD)
-        variances = np.concatenate(([0.5], np.ones(num_levels, dtype=settings.float_type)), axis=0)
+        # variances = np.ones(num_levels+1, dtype=settings.float_type)
         self.variances = Parameter(variances, transform=transforms.positive, dtype=settings.float_type)
             
 
@@ -77,7 +77,7 @@ class Sequential(Kernel):
         else:
             self.lengthscales = None
         
-        self.offsets = None
+        # self.offsets = None
 
         self.include_white = include_white
         if include_white:
@@ -209,14 +209,14 @@ class Sequential(Kernel):
             stream_length2 = tf.shape(X2)[1]
         
         if self.lengthscales is not None:
-             X /= self.lengthscales[None, None, :]
+             X /= self.lengthscales[None, None, :] if self.ARD else self.lengthscales
              if X2 is not None:
-                 X2 /= self.lengthscales[None, None, :]
+                 X2 /= self.lengthscales[None, None, :] if self.ARD else self.lengthscales
 
-        if self.offsets is not None:
-             X -= self.offsets[None, None, :]
-             if X2 is not None:
-                 X2 -= self.offsets[None, None, :]
+        # if self.offsets is not None:
+        #      X -= self.offsets[None, None, :]
+        #      if X2 is not None:
+        #          X2 -= self.offsets[None, None, :]
         
         num_features = self.num_features
         if self.num_lags > 0:
@@ -306,12 +306,12 @@ class Sequential(Kernel):
         stream_length = tf.shape(X)[1]
         
         if self.lengthscales is not None:
-             X /= self.lengthscales[None, None, :]
-             Z /= self.lengthscales[None, None, :]
+             X /= self.lengthscales[None, None, :] if self.ARD else self.lengthscales
+             Z /= self.lengthscales[None, None, :] if self.ARD else self.lengthscales
 
-        if self.offsets is not None:
-             X -= self.offsets[None, None, :]
-             Z -= self.offsets[None, None, :]
+        # if self.offsets is not None:
+        #      X -= self.offsets[None, None, :]
+        #      Z -= self.offsets[None, None, :]
 
         num_features = self.num_features
         if self.num_lags > 0:
@@ -386,16 +386,16 @@ class Sequential(Kernel):
         inducing_length, num_inducing = tf.shape(Z)[0], tf.shape(Z)[1]
         
         if self.lengthscales is not None:
-            Z /= self.lengthscales[None, None, :]
+            Z /= self.lengthscales[None, None, :] if self.ARD else self.lengthscales
 
         if X is not None:
             num_streams = tf.shape(X)[0]
             X = tf.reshape(X, [num_streams, -1, self.num_features])
             stream_length, num_features = tf.shape(X)[1], tf.shape(X)[2]
             if self.lengthscales is not None:
-                X /= self.lengthscales[None, None, :]
-            if self.offsets is not None:
-                X -= self.offsets[None, None, :]
+                X /= self.lengthscales[None, None, :] if self.ARD else self.lengthscales
+            # if self.offsets is not None:
+            #     X -= self.offsets[None, None, :]
             if self.num_lags > 0:
                 num_features *= self.num_lags + 1
                 X = helpers.add_lags_to_streams(X, self.lags)
@@ -480,9 +480,9 @@ class Sequential(Kernel):
         stream_length = tf.shape(X)[1]
 
         if self.lengthscales is not None:
-             X /= self.lengthscales[None, None, :]
-        if self.offsets is not None:
-             X -= self.offsets[None, None, :]
+             X /= self.lengthscales[None, None, :] if self.ARD else self.lengthscales
+        # if self.offsets is not None:
+        #      X -= self.offsets[None, None, :]
         
         num_features = self.num_features
         if self.num_lags > 0:
@@ -547,15 +547,16 @@ class SequentialLinear(Sequential):
 
     def __init__(self, input_dim, **kwargs):
         Sequential.__init__(self, input_dim, **kwargs)
-        self.gamma = Parameter(1.0/float(self.num_features), transform=transforms.positive, dtype=settings.float_type)
-        self.offsets = Parameter(np.zeros(self.num_features), dtype=settings.float_type)
+        # self.gamma = Parameter(1.0/float(self.num_features), transform=transforms.positive, dtype=settings.float_type)
+        # self.offsets = Parameter(np.zeros(self.num_features), dtype=settings.float_type)
         self._base_kern = self._lin
     
     __init__.__doc__ = Sequential.__init__.__doc__
 
     def _lin(self, X, X2=None):
         if X2 is None:
-            K = self.gamma * tf.matmul(X, X, transpose_b = True)
+            # K = self.gamma * tf.matmul(X, X, transpose_b = True)
+            K = tf.matmul(X, X, transpose_b = True)
             if self.include_white:
                 num_data = tf.shape(K)[-1]
                 diag = self.white * tf.eye(num_data, dtype=settings.float_type)
@@ -564,7 +565,8 @@ class SequentialLinear(Sequential):
                 K += diag
             return  K
         else:
-            return self.gamma * tf.matmul(X, X2, transpose_b = True)
+            # return self.gamma * tf.matmul(X, X2, transpose_b = True)
+            return tf.matmul(X, X2, transpose_b = True)
 
 class SequentialCosine(Sequential):
     """
@@ -573,7 +575,7 @@ class SequentialCosine(Sequential):
 
     def __init__(self, input_dim, **kwargs):
         Sequential.__init__(self, input_dim, **kwargs)
-        self.gamma = Parameter(1.0, transform=transforms.positive, dtype=settings.float_type)
+        # self.gamma = Parameter(1.0, transform=transforms.positive, dtype=settings.float_type)
         self._base_kern = self._cos
     
     __init__.__doc__ = Sequential.__init__.__doc__
@@ -581,10 +583,12 @@ class SequentialCosine(Sequential):
     def _cos(self, X, X2=None):
         X_norm =  tf.sqrt(tf.reduce_sum(tf.square(X), axis=-1))
         if X2 is None:
-            return self.gamma * tf.matmul(X, X, transpose_b = True) / (X_norm[..., :, None] * X_norm[..., None, :])
+            # return self.gamma * tf.matmul(X, X, transpose_b = True) / (X_norm[..., :, None] * X_norm[..., None, :])
+            return tf.matmul(X, X, transpose_b = True) / (X_norm[..., :, None] * X_norm[..., None, :])
         else:
             X2_norm = tf.sqrt(tf.reduce_sum(tf.square(X2), axis=-1))
-            return self.gamma * tf.matmul(X, X2, transpose_b = True) / (X_norm[..., :, None] * X2_norm[..., None, :])
+            # return self.gamma * tf.matmul(X, X2, transpose_b = True) / (X_norm[..., :, None] * X2_norm[..., None, :])
+            return tf.matmul(X, X2, transpose_b = True) / (X_norm[..., :, None] * X2_norm[..., None, :])
 
 
 class SequentialPoly(Sequential):
@@ -613,13 +617,14 @@ class SequentialRBF(Sequential):
     def __init__(self, input_dim, **kwargs):
         Sequential.__init__(self, input_dim, **kwargs)
         # self.sigma = Parameter([1.0], transform=transforms.positive, dtype=settings.float_type)
-        self.gamma = Parameter(1.0/float(self.num_features), transform=transforms.positive, dtype=settings.float_type)
+        # self.gamma = Parameter(1.0/float(self.num_features), transform=transforms.positive, dtype=settings.float_type)
         self._base_kern = self._rbf
     
     __init__.__doc__ = Sequential.__init__.__doc__
 
     def _rbf(self, X, X2=None):
-        K = tf.exp(-self.gamma * self._square_dist(X, X2) / 2)
+        # K = tf.exp(-self.gamma * self._square_dist(X, X2) / 2)
+        K = tf.exp(-self._square_dist(X, X2) / 2)
         if X2 is None and self.include_white:
             num_data = tf.shape(K)[-1]
             diag = self.white * tf.eye(num_data, dtype=settings.float_type)
@@ -661,14 +666,15 @@ class SequentialMatern12(Sequential):
     """
     def __init__(self, input_dim, **kwargs):
         Sequential.__init__(self, input_dim, **kwargs)
-        self.gamma = Parameter(1.0, transform=transforms.positive, dtype=settings.float_type)
+        # self.gamma = Parameter(1.0, transform=transforms.positive, dtype=settings.float_type)
         self._base_kern = self._Matern12
 
     __init__.__doc__ = Sequential.__init__.__doc__
     
     def _Matern12(self, X, X2 = None):
         r = self._euclid_dist(X, X2)
-        return tf.exp(-self.gamma * r)
+        # return tf.exp(-self.gamma * r)
+        return tf.exp(-r)
 
 
 SequentialLaplace = SequentialMatern12
