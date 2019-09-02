@@ -84,7 +84,7 @@ def pad_series(max_length, series):
     return np.concatenate((series, np.tile(series[-1], [max_length - series.shape[0], 1])), axis = 0)
     
 
-def tabulate_list_of_series(ts_list, orient_ax = 0, pad_with_na = False):
+def tabulate_list_of_streams(ts_list, orient_ax = 0, pad_with_na = False):
     """
     Takes as input a list of time-series and constructs a 2D array as list that may be fed as input to machine learning algorithms.
     Since concatenating a path with a constant path does not change its signature, doing this for different length paths is
@@ -125,8 +125,11 @@ def tabulate_list_of_series(ts_list, orient_ax = 0, pad_with_na = False):
     num_sequences = len(ts_list)
     
     ts_list_tabulated = list(tqdm(map(pad_these_series, ts_list), total = num_sequences))
-    ts_table = np.reshape(np.stack(ts_list_tabulated , axis = 0), [num_sequences, max_length * num_features])
+    # ts_table = np.reshape(np.stack(ts_list_tabulated , axis = 0), [num_sequences, max_length * num_features])
+    ts_table = np.stack(ts_list_tabulated , axis = 0)
     return ts_table
+
+tabulate_list_of_series = tabulate_list_of_streams
 
 def add_time_to_path(series, num_features = 1):
     """
