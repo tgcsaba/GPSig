@@ -77,6 +77,34 @@ def lr_hadamard_prod(A, B):
     C = tf.matmul(tf.expand_dims(A, axis=-1), tf.expand_dims(B, axis=-2))
     return tf.reshape(C, tf.concat((tf.shape(C)[:-2], [tf.reduce_prod(tf.shape(C)[-2:], axis=0)]), axis=0))
 
+def lr_hadamard_prod_rand(A, B, rank_bound, rand='sqrt', seeds=None):
+    """
+    Computes a randomized low-rank Hadamard product    
+    Inputs
+    :A:     An [..., k1] tensor
+    :B:     An [..., k2] tensor
+    :rand:  Randomization mode
+    Output
+    :C:     An [..., k1*k2] tensor
+    """
+    if rand == 'subsample':
+        if seeds is None:
+            C = lr_hadamard_prod_subsample(A, B, rank_bound)
+        else:
+            C = lr_hadamard_prod_subsample(A, B, rank_bound, seeds[i-1])
+    elif rand == 'subsample_gauss':
+        if seeds is None:
+            C = lr_hadamard_prod_subsample_gauss(A, B, rank_bound)
+        else:
+            C = lr_hadamard_prod_subsample_gauss(A, B, rank_bound, seeds[i-1])
+    else:
+        if seeds is None:
+            C = lr_hadamard_prod_sparse(A, B, rank_bound, sparsity)
+        else:
+            C = lr_hadamard_prod_sparse(A, B, rank_bound, sparsity, seeds[i-1])
+    
+    return C
+
 def draw_n_rademacher_samples(n, seed = None):
     """
     Draws n rademacher samples.
