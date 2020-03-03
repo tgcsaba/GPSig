@@ -428,7 +428,8 @@ class SignatureKernel(Kernel):
                 K_lvls = self._K_seq(X_scaled)
             
             if self.normalization:
-                K_lvls_diag_sqrt = tf.sqrt(tf.matrix_diag_part(K_lvls) + settings.jitter)
+                K_lvls += settings.jitter * tf.eye(num_examples, dtype=settings.float_type)[None]
+                K_lvls_diag_sqrt = tf.sqrt(tf.matrix_diag_part(K_lvls))
                 K_lvls /= K_lvls_diag_sqrt[:, :, None] * K_lvls_diag_sqrt[:, None, :]
 
         else:
@@ -459,8 +460,11 @@ class SignatureKernel(Kernel):
                     K1_lvls_diag = self._K_seq_diag(X_scaled)
                     K2_lvls_diag = self._K_seq_diag(X2_scaled)
                 
-                K1_lvls_diag_sqrt = tf.sqrt(K1_lvls_diag + settings.jitter)
-                K2_lvls_diag_sqrt = tf.sqrt(K2_lvls_diag + settings.jitter)
+                K1_lvls_diag += settings.jitter
+                K2_lvls_diag += settings.jitter
+
+                K1_lvls_diag_sqrt = tf.sqrt(K1_lvls_diag)
+                K2_lvls_diag_sqrt = tf.sqrt(K2_lvls_diag)
                 
                 K_lvls /= K1_lvls_diag_sqrt[:, :, None] * K2_lvls_diag_sqrt[:, None, :]
         
@@ -571,7 +575,9 @@ class SignatureKernel(Kernel):
             else:
                 Kxx_lvls_diag = self._K_seq_diag(X)
 
-            Kxx_lvls_diag_sqrt = tf.sqrt(Kxx_lvls_diag + settings.jitter)
+            Kxx_lvls_diag += settings.jitter
+
+            Kxx_lvls_diag_sqrt = tf.sqrt(Kxx_lvls_diag)
             Kzx_lvls /= Kxx_lvls_diag_sqrt[:, None, :]
 
         Kzx_lvls *= self.sigma * self.variances[:, None, None]
@@ -624,7 +630,10 @@ class SignatureKernel(Kernel):
                 Kxx_lvls = self._K_seq(X)
 
             if self.normalization:
-                Kxx_lvls_diag_sqrt = tf.sqrt(tf.matrix_diag_part(Kxx) + settings.jitter)
+                Kxx_lvls += settings.jitter * tf.eye(num_examples, dtype=settings.float_type)[None]
+                
+                Kxx_lvls_diag_sqrt = tf.sqrt(tf.matrix_diag_part(Kxx_lvls))
+
                 Kxx_lvls /= Kxx_lvls_diag_sqrt[:, :, None] * Kxx_lvls_diag_sqrt[:, None, :]
                 Kzx_lvls /= Kxx_lvls_diag_sqrt[:, None, :]
             
@@ -644,7 +653,10 @@ class SignatureKernel(Kernel):
                 Kxx_lvls_diag = self._K_seq_diag(X)
 
             if self.normalization:
-                Kxx_lvls_diag_sqrt = tf.sqrt(Kxx_lvls_diag + settings.jitter)
+                Kxx_lvls_diag += settings.jitter
+
+                Kxx_lvls_diag_sqrt = tf.sqrt(Kxx_lvls_diag)
+
                 Kzx_lvls /= Kxx_lvls_diag_sqrt[:, None, :]
                 Kxx_lvls_diag = tf.tile(self.sigma * self.variances[:, None], [1, num_examples])
             else:
@@ -693,7 +705,10 @@ class SignatureKernel(Kernel):
             Kxx2_lvls = self._K_seq(X, X2)
 
         if self.normalization:
-            Kxx_lvls_diag_sqrt = tf.sqrt(tf.matrix_diag_part(Kxx_lvls) + settings.jitter)
+            
+            Kxx_lvls += settings.jitter * tf.eye(num_examples, dtype=settings.float_type)[None]
+
+            Kxx_lvls_diag_sqrt = tf.sqrt(tf.matrix_diag_part(Kxx_lvls))
             Kxx_lvls /= Kxx_lvls_diag_sqrt[:, :, None] * Kxx_lvls_diag_sqrt[:, None, :]
             Kxx2_lvls /= Kxx_lvls_diag_sqrt[:, :, None]
         
@@ -704,7 +719,11 @@ class SignatureKernel(Kernel):
                 Kx2x2_lvls = self._K_seq(X2)
 
             if self.normalization:
-                Kx2x2_lvls_diag_sqrt = tf.sqrt(tf.matrix_diag_part(K_x2x2) + settings.jitter)                
+
+                K_x2x2_lvls += settings.jitter * tf.eye(num_examples2, dtype=settings.float_type)[None]
+
+                Kx2x2_lvls_diag_sqrt = tf.sqrt(tf.matrix_diag_part(K_x2x2_lvls)) 
+
                 Kxx2_lvls /= Kx2x2_lvls_diags_sqrt[:, None, :]
                 Kx2x2_lvls /= Kx2x2_lvls_diags_sqrt[:, :, None] * Kx2x2_lvls_diags_sqrt[:, None, :]
             
@@ -724,7 +743,10 @@ class SignatureKernel(Kernel):
                 Kx2x2_lvls_diag = self._K_seq_diag(X2)
 
             if self.normalization:
-                Kx2x2_lvls_diag_sqrt = tf.sqrt(Kx2x2_lvls_diag + settings.jitter)
+                Kx2x2_lvls_diag += settings.jitter
+
+                Kx2x2_lvls_diag_sqrt = tf.sqrt(Kx2x2_lvls_diag)
+                
                 Kxx2_lvls /= Kxx_lvls_diag_sqrt[:, :, None] * Kx2x2_lvls_diag_sqrt[:, None, :]
                 Kx2x2_lvls_diag = tf.tile(self.sigma * self.variances[:, None], [1, num_examples2])
             else:
