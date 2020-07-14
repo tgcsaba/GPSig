@@ -21,7 +21,7 @@ In the other notebook, `ts_classification.ipynb`, a worked out example is given 
 ***
 
 ## Download datasets
-The benchmarks directory contains the appropriate scripts used to run the benchmarking experiments in the paper. The datasets can be downloaded from our dropbox folder using the 'download_data.sh' script in the './benchmarks/datasets' folder by running
+The benchmarks directory contains the appropriate scripts used to run the benchmarking experiments in the paper. The datasets can be downloaded from our dropbox folder using the `download_data.sh` script in the `./benchmarks/datasets` folder by running
 ```
 cd benchmarks
 bash ./datasets/download_data.sh
