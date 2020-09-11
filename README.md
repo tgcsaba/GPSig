@@ -6,7 +6,12 @@ To get started, you should first clone the repository using git, e.g. with the c
 ```
 git clone https://github.com/tgcsaba/GPSig.git
 ```
-and then install the requirements with pip by
+and then create and activate virtual environment with Python <= 3.7
+```
+conda create -n env_name python=3.7
+conda activate env_name
+```
+Then, install the requirements using pip by
 ```
 pip install -r requirements.txt
 ```
