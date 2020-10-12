@@ -63,6 +63,11 @@ class SVGP(models.SVGP):
         
         num_samples = tf.shape(X_new)[0]
         Kzz, Kzx, Kxx = Kuu_Kuf_Kff(self.feature, self.kern, X_new, jitter=settings.jitter, full_f_cov=full_cov)
+        
+        # Kzz = Kuu(self.feature, self.kern, jitter=settings.jitter)
+        # Kzx = Kuf(self.feature, self.kern, X_new)
+        # Kxx = self.kern.K(X_new) if full_cov else self.kern.Kdiag(X_new)
+
         f_mean, f_var = base_conditional(Kzx, Kzz, Kxx, self.q_mu, full_cov=full_cov, q_sqrt=tf.matrix_band_part(self.q_sqrt, -1, 0), white=self.whiten)
         f_mean += self.mean_function(X_new)
         f_var = _expand_independent_outputs(f_var, full_cov, full_output_cov)

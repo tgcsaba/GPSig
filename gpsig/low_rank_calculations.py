@@ -49,7 +49,8 @@ def Nystrom_map(X, kern, nys_samples = None, num_components = None):
 
     num_components = tf.shape(nys_samples)[0]
     W = kern(nys_samples, nys_samples)
-    W += tf.diag(settings.numerics.jitter_level * tf.random_uniform([num_components], dtype=settings.float_type))
+
+    # W += tf.diag(settings.numerics.jitter_level * tf.random_uniform([num_components], dtype=settings.float_type))
     # to get around some undeterminedness of the gradient in special cases
     
     S, U = tf.self_adjoint_eig(W)

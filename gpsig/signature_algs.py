@@ -188,7 +188,7 @@ def signature_kern_first_order_lr_feature(U, num_levels, rank_bound, sparsity = 
             P = lr_hadamard_prod_rand(U, P, rank_bound, sparsity)
         else:
             P = lr_hadamard_prod_rand(U, P, rank_bound, sparsity, seeds[i-2])
-        Phi.append(tf.reduce_sum(U, axis=1))
+        Phi.append(tf.reduce_sum(P, axis=1))
     return Phi
 
 def tensor_kern_lr_feature(U, num_levels, rank_bound, sparsity = 'sqrt', seeds = None):
