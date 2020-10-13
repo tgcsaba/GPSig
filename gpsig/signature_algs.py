@@ -77,15 +77,19 @@ def tensor_kern(M, num_levels):
     """
     Computing the square matrix of inner product of inducing tensors
     # Input
-    :M:                 (num_levels*(num_levels+1)/2, num_tensors, num_tensors) tensor entries vs tensor entries kernel matrices
+    :M:                 (num_levels*(num_levels+1)/2, num_tensors, num_tensors) tensor components vs tensor components kernel matrices or 
+                        (num_levels*(num_levels+1)/2, num_tensors)
     :num_levels:        degree of truncation for the signatures
     # Output
     :K:                 (num_tensors, num_tensors) kernel matrix tensors
     """
 
-    num_tensors, num_tensors2 = tf.shape(M)[1], tf.shape(M)[2]
-    
-    K = [tf.ones((num_tensors, num_tensors2), dtype=settings.float_type)]
+    if M.shape.ndims == 3:
+        num_tensors, num_tensors2 = tf.shape(M)[1], tf.shape(M)[2]
+        K = [tf.ones((num_tensors, num_tensors2), dtype=settings.float_type)]
+    else:
+        num_tensors = tf.shape(M)[1]
+        K = [tf.ones((num_tensors), dtype=settings.float_type)]
     
     k = 0
     for i in range(1, num_levels+1):

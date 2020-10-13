@@ -102,33 +102,41 @@ def _draw_n_rademacher_samples(n, seed = None):
                 tf.ones([n], dtype=settings.float_type), -1.*tf.ones([n], dtype=settings.float_type))
 
 
-def lr_hadamard_prod_subsample(A, B, num_components, seed = None):
+def lr_hadamard_prod_subsample(A, B, rank_bound, seed = None):
     """
     Low-rank Hadamard product with subsampling.
     # Input
     :A: An [..., k1] tensor
     :B: An [..., k2] tensor
     # Output
-    :return C: A [..., num_components] tensor
+    :return C: A [..., rank_bound] tensor
     """
     batch_shape = tf.shape(A)[:-1]
     k1 = tf.shape(A)[-1]
-    k2 = tf.shape(B)[-1]
+    k2 = tf.shape(B)[-1] 
     idx1 = tf.reshape(tf.range(k1, dtype=settings.int_type), [1, -1, 1])
     idx2 = tf.reshape(tf.range(k2, dtype=settings.int_type), [-1, 1, 1])
     
-    combinations = tf.concat([idx1 + tf.zeros_like(idx2), tf.zeros_like(idx1) + idx2], axis=2)
-    combinations = tf.random_shuffle(tf.reshape(combinations, [-1, 2]))
+    num_combinations = k1 * k2
     
-    select = combinations[:num_components]
+    combinations = tf.concat([idx1 + tf.zeros_like(idx2), tf.zeros_like(idx1) + idx2], axis=2)
+    combinations = tf.reshape(combinations, [num_combinations, 2])
+    # combinations = tf.random_shuffle(tf.reshape(combinations, [num_combinations, 2]))
+    # select = combinations[:rank_bound]
+
+
+    logits = tf.math.log(1./tf.cast(num_combinations, settings.float_type) * tf.ones((1, num_combinations), dtype=settings.float_type))
+    select_idx = tf.squeeze(tf.random.stateless_categorical(logits, rank_bound, seed=seed))
+    select = tf.gather(combinations, select_idx, axis=0)
+    
     A = tf.gather(A, select[:,0], axis=-1)
     B = tf.gather(B, select[:,1], axis=-1)
-    C = tf.reshape(A * B, [-1, num_components])
-    D = tf.expand_dims(_draw_n_rademacher_samples(num_components, seed = seed), axis=0)    
-    return tf.reshape(C * D, tf.concat((batch_shape, [num_components]), axis=0))
+    C = tf.reshape(A * B, tf.concat((batch_shape, [rank_bound]), axis=0))
+    # D = tf.expand_dims(_draw_n_rademacher_samples(rank_bound, seed = seed), axis=0)    
+    return C
 
 
-def _draw_n_gaussian_samples(n, seed = None):
+def _draw_n_gaussian_samples(n, seed = None): 
     """
     Draws n gaussian samples.
     """
@@ -150,7 +158,7 @@ def _draw_n_sparse_gaussian_samples(n, s, seed = None):
                 stateless.stateless_random_normal([n], dtype=settings.float_type, seed = seed), tf.zeros([n], dtype=settings.float_type))
 
 
-def lr_hadamard_prod_sparse(A, B, num_components, sparse_scale, seed = None):
+def lr_hadamard_prod_sparse(A, B, rank_bound, sparse_scale, seed = None):
     """
     Low-rank Hadamard product with Very Sparse Johnson Lindenstrauss Transform.
     An improvement on lowrank_hadamard_prod_subsample with small additional cost. 
@@ -162,7 +170,7 @@ def lr_hadamard_prod_sparse(A, B, num_components, sparse_scale, seed = None):
     :A: A [..., k1] tensor
     :B: A [..., k2] tensor
     # Output
-    :C: A [..., num_components] tensor
+    :C: A [..., rank_bound] tensor
     """
     batch_shape = tf.shape(A)[:-1]
     k1 = tf.shape(A)[-1]
@@ -173,14 +181,14 @@ def lr_hadamard_prod_sparse(A, B, num_components, sparse_scale, seed = None):
     combinations = tf.reshape(tf.concat([idx1 + tf.zeros_like(idx2), tf.zeros_like(idx1) + idx2], axis=2), [-1, 2])
     
     D = k1 * k2
-    rand_matrix_size = D * num_components
+    rand_matrix_size = D * rank_bound
     
     if sparse_scale == 'log':
         s = tf.cast(D, settings.float_type) / tf.log(tf.cast(D, settings.float_type))
     elif sparse_scale == 'sqrt':
         s = tf.sqrt(tf.cast(D, settings.float_type))
 
-    R = tf.reshape(_draw_n_sparse_gaussian_samples(rand_matrix_size, s, seed = seed), [D, num_components])
+    R = tf.reshape(_draw_n_sparse_gaussian_samples(rand_matrix_size, s, seed = seed), [D, rank_bound])
     
     idx_result = tf.count_nonzero(R, axis=1) > 0
     idx_combined = tf.boolean_mask(combinations, idx_result, axis=0)
@@ -190,5 +198,5 @@ def lr_hadamard_prod_sparse(A, B, num_components, sparse_scale, seed = None):
     C = A * B
     R_nonzero = tf.boolean_mask(R, idx_result, axis=0)
     C = tf.matmul(C, R_nonzero)    
-    scale = tf.sqrt(s / tf.cast(num_components, settings.float_type))
-    return scale * tf.reshape(C, tf.concat((batch_shape, [num_components]), axis=0))
+    scale = tf.sqrt(s / tf.cast(rank_bound, settings.float_type))
+    return scale * tf.reshape(C, tf.concat((batch_shape, [rank_bound]), axis=0))

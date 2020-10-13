@@ -103,7 +103,7 @@ class SignatureKernel(Kernel):
 
         correct_shape = (size,) if ARD else () 
         
-        if np.asarray(value).squeeze().shape != correct_shape:
+        if np.asarray(value).shape != correct_shape:
             raise ValueError("shape of {} does not match the expected shape {}".format(name, correct_shape))
         return value
     
@@ -219,9 +219,9 @@ class SignatureKernel(Kernel):
         num_samples = np.shape(X)[0]
         idx = np.random.choice(num_samples, size=(self.num_components), replace=False)
         nys_samples = np.reshape(np.tile(X[idx, None, :], [1, self.num_lags+1, 1]), [self.num_components, self.num_features*(self.num_lags+1)])
-        print(nys_samples.shape)
         self.nystrom_samples.assign(nys_samples)
         self.is_low_rank_fitted.assign(1)
+        return
 
 
     def _K_seq_diag(self, X):
@@ -298,6 +298,29 @@ class SignatureKernel(Kernel):
             raise NotImplementedError('Low-rank mode not implemented for order higher than 1.')
         
         return Phi_lvls
+
+    def _K_tens_diag(self, Z, increments=False):
+        """
+        # Input
+        :Z:             (num_levels*(num_levels+1)/2, num_tensors, num_features) array of inducing tensor components, if not increments 
+                        else (num_levels*(num_levels+1)/2, num_tensors, 2, num_features)
+        # Output
+        :K_lvls:        (num_levels+1,) list of (num_tensors) kernel matrices (for each T.A. level)
+        """
+
+        len_tensors, num_tensors, num_features = tf.shape(Z)[0], tf.shape(Z)[1], tf.shape(Z)[-1]
+
+        if increments:
+            Z = tf.reshape(Z, [len_tensors * num_tensors, 2, num_features])
+            M = tf.reshape(self._base_kern(Z), [len_tensors, num_tensors, 2, 2])
+            M = M[:, :, 1, 1] + M[:, :, 0, 0] - M[:, :, 1, 0] - M[:, :, 0, 1]
+        else:
+            Z = tf.reshape(Z, [len_tensors * num_tensors, 1, num_features])
+            M = tf.reshape(self._base_kern(Z), [len_tensors, num_tensors])
+        
+        K_lvls = signature_algs.tensor_kern(M, self.num_levels)
+
+        return K_lvls
                 
     def _K_tens(self, Z, increments=False):
         """
@@ -379,6 +402,27 @@ class SignatureKernel(Kernel):
         return K_lvls
 
     @params_as_tensors
+    def _apply_scaling_to_samples(self, X):
+        """
+        Applies scaling to given samples.
+        """
+        
+        num_samples, _ = tf.unstack(tf.shape(X))
+        
+        num_features = self.num_features * (self.num_lags + 1)
+
+        X = tf.reshape(X, (num_samples, self.num_lags+1, self.num_features))
+        
+        if self.lengthscales is not None:
+            X /= self.lengthscales[None, None, :] if self.ARD else self.lengthscales
+
+        if self.num_lags > 0 and self.lagscales is not None:
+            X *= self.lagscales[None, :, None]
+        
+        X = tf.reshape(X, (num_samples, num_features))
+        return X
+
+    @params_as_tensors
     def _apply_scaling_and_lags_to_sequences(self, X):
         """
         Applies scaling and lags to sequences.
@@ -444,8 +488,8 @@ class SignatureKernel(Kernel):
         Computes signature kernel between sequences
         """
 
-        if self.low_rank and self.fixed_low_rank_params:
-            tf.assert_equal(self.is_low_rank_fitted, 1)
+        # if self.low_rank and self.fixed_low_rank_params:
+        #     tf.assert_equal(self.is_low_rank_fitted, 1)
 
         if presliced:
             presliced_X = True
@@ -467,7 +511,8 @@ class SignatureKernel(Kernel):
         if X2 is None:
             if self.low_rank:
                 if self.fixed_low_rank_params:
-                    Phi_lvls = self._K_seq_lr_feat(X, nys_samples=self.nystrom_samples, seeds=self.projection_seeds)
+                    nys_samples = self._apply_scaling_to_samples(self.nystrom_samples)
+                    Phi_lvls = self._K_seq_lr_feat(X, nys_samples=nys_samples, seeds=self.projection_seeds)
                 else:
                     Phi_lvls = self._K_seq_lr_feat(X)
 
@@ -476,7 +521,7 @@ class SignatureKernel(Kernel):
                 K_lvls = self._K_seq(X_scaled)
             
             if self.normalization:
-                K_lvls += settings.jitter * tf.eye(num_examples, dtype=settings.float_type)[None]
+                K_lvls += settings.jitter
                 K_lvls_diag_sqrt = tf.sqrt(tf.matrix_diag_part(K_lvls))
                 K_lvls /= K_lvls_diag_sqrt[:, :, None] * K_lvls_diag_sqrt[:, None, :]
 
@@ -490,7 +535,7 @@ class SignatureKernel(Kernel):
             if self.low_rank:
                 if self.fixed_low_rank_params:
                     seeds = self.projection_seeds
-                    nys_samples = self.nystrom_samples
+                    nys_samples = self._apply_scaling_to_samples(self.nystrom_samples)
                 else:
                     seeds = tf.random_uniform((self.num_levels-1, 2), minval=0, maxval=np.iinfo(settings.int_type).max, dtype=settings.int_type)
                     idx, _ = low_rank_calculations._draw_indices(num_examples*len_examples + num_examples2*len_examples2, self.num_components)
@@ -510,7 +555,8 @@ class SignatureKernel(Kernel):
                 else:
                     K1_lvls_diag = self._K_seq_diag(X_scaled)
                     K2_lvls_diag = self._K_seq_diag(X2_scaled)
-                
+
+                K_lvls += settings.jitter
                 K1_lvls_diag += settings.jitter
                 K2_lvls_diag += settings.jitter
 
@@ -529,11 +575,11 @@ class SignatureKernel(Kernel):
     @params_as_tensors
     def Kdiag(self, X, presliced=False, return_levels=False):
         """
-        Computes the diagonal of a square signature kernel matrix.
+        Computes the diagonals of a square signature kernel matrix.
         """
 
-        if self.low_rank and self.fixed_low_rank_params:
-            tf.assert_equal(self.is_low_rank_fitted, 1)
+        # if self.low_rank and self.fixed_low_rank_params:
+        #     tf.assert_equal(self.is_low_rank_fitted, 1)
 
         num_examples = tf.shape(X)[0]
         
@@ -552,7 +598,8 @@ class SignatureKernel(Kernel):
 
         if self.low_rank:
             if self.fixed_low_rank_params:
-                Phi_lvls = self._K_seq_lr_feat(X, nys_samples=self.nystrom_samples, seeds=self.projection_seeds)
+                nys_samples = self._apply_scaling_to_samples(self.nystrom_samples)
+                Phi_lvls = self._K_seq_lr_feat(X, nys_samples=nys_samples, seeds=self.projection_seeds)
             else:
                 Phi_lvls = self._K_seq_lr_feat(X)
 
@@ -573,8 +620,8 @@ class SignatureKernel(Kernel):
         Computes a square covariance matrix of inducing tensors Z.
         """
 
-        if self.low_rank and self.fixed_low_rank_params:
-            tf.assert_equal(self.is_low_rank_fitted, 1)
+        # if self.low_rank and self.fixed_low_rank_params:
+        #     tf.assert_equal(self.is_low_rank_fitted, 1)
         
         num_tensors, len_tensors = tf.shape(Z)[1], tf.shape(Z)[0]
 
@@ -585,13 +632,19 @@ class SignatureKernel(Kernel):
 
         if self.low_rank:
             if self.fixed_low_rank_params:
-                Phi_lvls = self._K_tens_lr_feat(Z, increments=increments, nys_samples=self.nystrom_samples, seeds=self.projection_seeds)
+                nys_samples = self._apply_scaling_to_samples(self.nystrom_samples)
+                Phi_lvls = self._K_tens_lr_feat(Z, increments=increments, nys_samples=nys_samples, seeds=self.projection_seeds)
             else:
                 Phi_lvls = self._K_tens_lr_feat(Z, increments=increments)
 
             K_lvls = tf.stack([tf.matmul(P, P, transpose_b=True) for P in Phi_lvls], axis=0)
         else:
             K_lvls = self._K_tens(Z, increments=increments)
+
+        if self.normalization:
+            K_lvls += settings.jitter
+            K_lvls_diag_sqrt = tf.sqrt(tf.matrix_diag_part(K_lvls))
+            K_lvls /= K_lvls_diag_sqrt[:, :, None] * K_lvls_diag_sqrt[:, None, :] 
 
         K_lvls *= self.global_variance * self.variances[:, None, None] if self.ARD else self.variances
         
@@ -606,8 +659,8 @@ class SignatureKernel(Kernel):
         Computes a cross-covariance matrix between inducing tensors and sequences.
         """
 
-        if self.low_rank and self.fixed_low_rank_params:
-            tf.assert_equal(self.is_low_rank_fitted, 1)
+        # if self.low_rank and self.fixed_low_rank_params:
+        #     tf.assert_equal(self.is_low_rank_fitted, 1)
 
         if not presliced:
             X, _ = self._slice(X, None)
@@ -628,7 +681,7 @@ class SignatureKernel(Kernel):
         if self.low_rank:
             if self.fixed_low_rank_params:
                 seeds = self.projection_seeds
-                nys_samples = self.nystrom_samples
+                nys_samples = self._apply_scaling_to_samples(self.nystrom_samples)
             else:
                 seeds = tf.random_uniform((self.num_levels-1, 2), minval=0, maxval=np.iinfo(settings.int_type).max, dtype=settings.int_type)
                 idx, _ = low_rank_calculations._draw_indices(num_tensors*len_tensors*(int(increments)+1) + num_examples*len_examples, self.num_components)
@@ -644,13 +697,18 @@ class SignatureKernel(Kernel):
         if self.normalization:
             if self.low_rank:
                 Kxx_lvls_diag = tf.stack([tf.reduce_sum(tf.square(P), axis=-1) for P in Phi_X_lvls], axis=0)
+                Kzz_lvls_diag = tf.stack([tf.reduce_sum(tf.square(P), axis=-1) for P in Phi_Z_lvls], axis=0)
             else:
                 Kxx_lvls_diag = self._K_seq_diag(X)
+                Kzz_lvls_diag = self._K_tens_diag(Z, increments=increments)
 
+            Kzx_lvls += settings.jitter
+            Kzz_lvls_diag += settings.jitter
             Kxx_lvls_diag += settings.jitter
 
+            Kzz_lvls_diag_sqrt = tf.sqrt(Kzz_lvls_diag)
             Kxx_lvls_diag_sqrt = tf.sqrt(Kxx_lvls_diag)
-            Kzx_lvls /= Kxx_lvls_diag_sqrt[:, None, :]
+            Kzx_lvls /= Kxx_lvls_diag_sqrt[:, None, :] * Kzz_lvls_diag_sqrt[:, :, None]
 
         Kzx_lvls *= self.global_variance * self.variances[:, None, None] if self.ARD else self.variances
         

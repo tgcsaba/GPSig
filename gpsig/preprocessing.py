@@ -98,7 +98,7 @@ def add_time_to_table(sequences_array, num_features = None):
         num_features = num_features or 1
     
     sequences_array = sequences_array.reshape([sequences_array.shape[0], -1, num_features])
-    sequences_array_with_time = np.apply_along_axis(lambda sequence: add_time_to_sequence(sequence), 1, sequences_array)
+    sequences_array_with_time = np.stack([add_time_to_sequence(sequence) for sequence in sequences_array], axis=0)
     return sequences_array_with_time
 
 def add_natural_parametrization_to_table(sequences_array, num_features = None):
