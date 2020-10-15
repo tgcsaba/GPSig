@@ -214,7 +214,7 @@ def compute_feature_in_batches(feature_fn, X, batch_size=50):
     P = np.concatenate(P, axis=0)
     return P
 
-def compute_gpflow_kernel_matrices(kernel, X, Y, tabulation='interp', add_time=True, batch_size=None, **kwargs):
+def compute_gpflow_kernel_matrices(kernel, X, Y, tabulation='interp', add_time=False, batch_size=None, **kwargs):
     
     if add_time:
         X = add_time_to_list(X)
