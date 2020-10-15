@@ -1,9 +1,12 @@
 import numpy as np
 import tensorflow as tf
 
-from gpflow import settings, transforms, models, likelihoods, mean_functions
-from gpflow.params import Parameter, DataHolder, Minibatch
-from gpflow.decors import params_as_tensors, params_as_tensors_for, autoflow
+from gpflow import config
+from gpflow import utilities
+from gpflow import models 
+from gpflow import likelihoods
+from gpflow import mean_functions
+from gpflow.base import Parameter
 from gpflow.kullback_leiblers import gauss_kl
 from gpflow.conditionals import base_conditional, _expand_independent_outputs
 from gpflow.features import Kuu, Kuf
@@ -36,7 +39,7 @@ class SVGP(models.SVGP):
         
         return
     
-    @params_as_tensors
+    
     def _build_likelihood(self):
 
         X = self.X
@@ -55,16 +58,16 @@ class SVGP(models.SVGP):
         var_exp = self.likelihood.variational_expectations(f_mean, f_var, Y)
 
         # scaling for batch size
-        scale = tf.cast(self.num_data, settings.float_type) / tf.cast(num_samples, settings.float_type)
+        scale = tf.cast(self.num_data, config.default_float()) / tf.cast(num_samples, config.default_float())
         return tf.reduce_sum(var_exp) * scale - KL
 
-    @params_as_tensors
+    
     def _build_predict(self, X_new, full_cov=False, full_output_cov=False, return_Kzz=False):
         
         num_samples = tf.shape(X_new)[0]
-        Kzz, Kzx, Kxx = Kuu_Kuf_Kff(self.feature, self.kern, X_new, jitter=settings.jitter, full_f_cov=full_cov)
+        Kzz, Kzx, Kxx = Kuu_Kuf_Kff(self.feature, self.kern, X_new, jitter=config.default_jitter(), full_f_cov=full_cov)
         
-        # Kzz = Kuu(self.feature, self.kern, jitter=settings.jitter)
+        # Kzz = Kuu(self.feature, self.kern, jitter=config.default_jitter())
         # Kzx = Kuf(self.feature, self.kern, X_new)
         # Kxx = self.kern.K(X_new) if full_cov else self.kern.Kdiag(X_new)
 

@@ -4,7 +4,7 @@ from copy import deepcopy
 import numpy as np
 import tensorflow as tf
 
-from gpflow import actions, settings
+from gpflow import actions, config
 from gpflow.training.tensorflow_optimizer import _TensorFlowOptimizer, _REGISTERED_TENSORFLOW_OPTIMIZERS
 
 ### Imports optimizers from TF contrib, uses same code as in GPflow

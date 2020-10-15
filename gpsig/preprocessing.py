@@ -1,6 +1,7 @@
 import numpy as np
 from functools import partial
 from tqdm import tqdm
+from scipy.interpolate import interp1d
 
 def pad_sequence(max_length, pre, seq):
     """
@@ -16,8 +17,33 @@ def pad_sequence(max_length, pre, seq):
     else:
         return np.concatenate((seq, np.tile(seq[-1], [max_length - seq.shape[0], 1])), axis = 0)
 
+def interp_list_of_sequences(sequences_list, orient_ax = 0):
+    """
+    """
+    # First check whether sequence are of the right format
+    if not np.all([sequence.ndim == 2 for sequence in sequences_list]):
+        raise ValueError('Make sure ndim == 2 for all sequences in the list!')
+    
+    # Transpose if horizontally oriented
+    if orient_ax == 1:
+        sequences_list = [np.transpose(sequence) for sequence in sequences_list]
+    orient_ax = 0
+    feature_ax = 1
+    
+    num_features = np.asarray([sequence.shape[feature_ax] for sequence in sequences_list])
+    if not np.all(num_features == num_features[0]):
+        raise ValueError('Different path dimensions found. Please preprocess sequences beforehand so that all paths contain the same number of features.')
+    num_features = num_features[0]
+    
+    max_length = np.max([sequence.shape[orient_ax] for sequence in sequences_list])
 
-def tabulate_list_of_sequences(sequences_list, orient_ax = 0, pad_with = None, pre=False):
+    t_q = np.arange(max_length) / (max_length - 1.)
+    
+    interpolated = np.stack([interp1d(np.arange(sequence.shape[0]) / (sequence.shape[0] - 1.), sequence, axis=0)(t_q) for sequence in sequences_list], axis=0)
+
+    return interpolated
+
+def pad_list_of_sequences(sequences_list, orient_ax = 0, pad_with = None, pre=True):
     """
     Takes as input a list of sequences and constructs a 2D array as list that may be fed as input to machine learning algorithms.
     Since concatenating a path with a constant path does not change its signature, doing this for different length paths is
@@ -56,7 +82,7 @@ def tabulate_list_of_sequences(sequences_list, orient_ax = 0, pad_with = None, p
 
     num_sequences = len(sequences_list)
     
-    sequences_list_tabulated = list(tqdm(map(pad_these_sequence, sequences_list), total = num_sequences))
+    sequences_list_tabulated = list(map(pad_these_sequence, sequences_list))
     sequences_array = np.stack(sequences_list_tabulated , axis = 0)
     return sequences_array
 

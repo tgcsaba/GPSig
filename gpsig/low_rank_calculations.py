@@ -1,11 +1,9 @@
 import tensorflow as tf
 
-from gpflow import settings
-from gpflow.conditionals import base_conditional
+from gpflow import config
 import numpy as np
-from tensorflow.contrib import stateless
 import tensorflow as tf
-from gpflow import settings
+from gpflow import config
 from gpflow.kullback_leiblers import gauss_kl
 
 
@@ -14,7 +12,7 @@ def _draw_indices(n, l, need_inv = False):
     Draws l indices from 0 to n-1 without replacement.
     Returns of a list of drawn and not drawn indices, and the inverse permutation 
     """
-    idx = tf.random_shuffle(tf.range(n))
+    idx = tf.random.shuffle(tf.range(n))
     idx_sampled, idx_not_sampled = tf.split(idx, [l, n-l])
     if need_inv:
         inv_map = tf.reverse(tf.nn.top_k(idx, k = n, sorted = True)[1], axis = [0])
@@ -23,38 +21,38 @@ def _draw_indices(n, l, need_inv = False):
         return idx_sampled, idx_not_sampled
 
 
-def Nystrom_map(X, kern, nys_samples = None, num_components = None):
+def Nystrom_map(X, kern, nys_samples = None, rank_bound = None):
     """
-    Computes the Nystrom features with uniform sampling given a kernel and num_components
+    Computes the Nystrom features with uniform sampling given a kernel and rank_bound
     See e.g. https://dl.acm.org/citation.cfm?id=2343678
     -------------------------------------------------------------------
     # Input
     :X:                 (num_samples, num_dims) tensor of data point observations with size 
     :kern:              function handle to a kernel function that takes two matrices as input e.g. X1 (num_samples1, num_dims)
                         and X2 (num_samples2, num_dim), and computes the matrix k(X1, X2) matrix of size (num_samples1, num_samples2)
-    :nys_samples:       if given, these samples are used in the Nystrom approximation, has priority over num_components
-    :num_components:    number of components to take, i.e. the rank of the low-rank kernel matrix
+    :nys_samples:       if given, these samples are used in the Nystrom approximation, has priority over rank_bound
+    :rank_bound:    number of components to take, i.e. the rank of the low-rank kernel matrix
     # Output
-    :X_nys:             tensor of Nystrom features of shape (num_samples, num_components)
+    :X_nys:             tensor of Nystrom features of shape (num_samples, rank_bound)
     """
     
     num_samples = tf.shape(X)[0]
     
-    if nys_samples is None and num_components is None:
-        raise ValueError('One of num_components or nys_samples should be given')
+    if nys_samples is None and rank_bound is None:
+        raise ValueError('One of rank_bound or nys_samples should be given')
 
     if nys_samples is None:
-        idx, _ = _draw_indices(num_samples, num_components)
+        idx, _ = _draw_indices(num_samples, rank_bound)
         nys_samples = tf.gather(X, idx, axis = - 2)
 
-    num_components = tf.shape(nys_samples)[0]
+    rank_bound = tf.shape(nys_samples)[0]
     W = kern(nys_samples, nys_samples)
 
-    # W += tf.diag(settings.numerics.jitter_level * tf.random_uniform([num_components], dtype=settings.float_type))
+    # W += tf.diag(config.default_jitter()_level * tf.random.uniform([rank_bound], dtype=config.default_float()))
     # to get around some undeterminedness of the gradient in special cases
     
-    S, U = tf.self_adjoint_eig(W)
-    S += settings.jitter * tf.ones((num_components), dtype=settings.float_type)
+    S, U = tf.linalg.eigh(W)
+    S += config.default_jitter() * tf.ones((rank_bound), dtype=config.default_float())
     D = tf.sqrt(S)
 
     Kxy = kern(X, nys_samples)
@@ -95,11 +93,11 @@ def _draw_n_rademacher_samples(n, seed = None):
     Draws n rademacher samples.
     """
     if seed is None:
-        return tf.where(tf.random_uniform([n], dtype=settings.float_type) <= 0.5,
-                tf.ones([n], dtype=settings.float_type), -1.*tf.ones([n], dtype=settings.float_type))
+        return tf.where(tf.random.uniform([n], dtype=config.default_float()) <= 0.5,
+                tf.ones([n], dtype=config.default_float()), -1.*tf.ones([n], dtype=config.default_float()))
     else:
-        return tf.where(stateless.stateless_random_uniform([n], dtype=settings.float_type, seed = seed) <= 0.5,
-                tf.ones([n], dtype=settings.float_type), -1.*tf.ones([n], dtype=settings.float_type))
+        return tf.where(tf.random.stateless_uniform([n], dtype=config.default_float(), seed = seed) <= 0.5,
+                tf.ones([n], dtype=config.default_float()), -1.*tf.ones([n], dtype=config.default_float()))
 
 
 def lr_hadamard_prod_subsample(A, B, rank_bound, seed = None):
@@ -114,8 +112,8 @@ def lr_hadamard_prod_subsample(A, B, rank_bound, seed = None):
     batch_shape = tf.shape(A)[:-1]
     k1 = tf.shape(A)[-1]
     k2 = tf.shape(B)[-1] 
-    idx1 = tf.reshape(tf.range(k1, dtype=settings.int_type), [1, -1, 1])
-    idx2 = tf.reshape(tf.range(k2, dtype=settings.int_type), [-1, 1, 1])
+    idx1 = tf.reshape(tf.range(k1, dtype=config.default_int()), [1, -1, 1])
+    idx2 = tf.reshape(tf.range(k2, dtype=config.default_int()), [-1, 1, 1])
     
     num_combinations = k1 * k2
     
@@ -125,7 +123,7 @@ def lr_hadamard_prod_subsample(A, B, rank_bound, seed = None):
     # select = combinations[:rank_bound]
 
 
-    logits = tf.math.log(1./tf.cast(num_combinations, settings.float_type) * tf.ones((1, num_combinations), dtype=settings.float_type))
+    logits = tf.math.log(1./tf.cast(num_combinations, config.default_float()) * tf.ones((1, num_combinations), dtype=config.default_float()))
     select_idx = tf.squeeze(tf.random.stateless_categorical(logits, rank_bound, seed=seed))
     select = tf.gather(combinations, select_idx, axis=0)
     
@@ -141,21 +139,21 @@ def _draw_n_gaussian_samples(n, seed = None):
     Draws n gaussian samples.
     """
     if seed is None:
-        return tf.random_normal([n], dtype=settings.float_type)
+        return tf.random.normal([n], dtype=config.default_float())
     else:
-        return stateless.stateless_random_normal([n], dtype=settings.float_type, seed = seed)
+        return tf.random.stateless_normal([n], dtype=config.default_float(), seed = seed)
 
 def _draw_n_sparse_gaussian_samples(n, s, seed = None):
     """
     Draws n sparse gaussian samples, that is with P(X = N(0,1)) = 1/s, P(X = 0) = 1 - 1/s.
     """
-    s = tf.cast(s, settings.float_type)
+    s = tf.cast(s, config.default_float())
     if seed is None:
-        return tf.where(tf.random_uniform([n], dtype=settings.float_type) <= 1./s,
-                tf.random_normal([n], dtype=settings.float_type), tf.zeros([n], dtype=settings.float_type))
+        return tf.where(tf.random.uniform([n], dtype=config.default_float()) <= 1./s,
+                tf.random.normal([n], dtype=config.default_float()), tf.zeros([n], dtype=config.default_float()))
     else:
-        return tf.where(stateless.stateless_random_uniform([n], dtype=settings.float_type, seed = seed) <= 1./s,
-                stateless.stateless_random_normal([n], dtype=settings.float_type, seed = seed), tf.zeros([n], dtype=settings.float_type))
+        return tf.where(tf.random.stateless_uniform([n], dtype=config.default_float(), seed = seed) <= 1./s,
+                tf.random.stateless_normal([n], dtype=config.default_float(), seed = seed), tf.zeros([n], dtype=config.default_float()))
 
 
 def lr_hadamard_prod_sparse(A, B, rank_bound, sparse_scale, seed = None):
@@ -175,8 +173,8 @@ def lr_hadamard_prod_sparse(A, B, rank_bound, sparse_scale, seed = None):
     batch_shape = tf.shape(A)[:-1]
     k1 = tf.shape(A)[-1]
     k2 = tf.shape(B)[-1]
-    idx1 = tf.reshape(tf.range(k1, dtype=settings.int_type), [1, -1, 1])
-    idx2 = tf.reshape(tf.range(k2, dtype=settings.int_type), [-1, 1, 1])
+    idx1 = tf.reshape(tf.range(k1, dtype=config.default_int()), [1, -1, 1])
+    idx2 = tf.reshape(tf.range(k2, dtype=config.default_int()), [-1, 1, 1])
     
     combinations = tf.reshape(tf.concat([idx1 + tf.zeros_like(idx2), tf.zeros_like(idx1) + idx2], axis=2), [-1, 2])
     
@@ -184,13 +182,13 @@ def lr_hadamard_prod_sparse(A, B, rank_bound, sparse_scale, seed = None):
     rand_matrix_size = D * rank_bound
     
     if sparse_scale == 'log':
-        s = tf.cast(D, settings.float_type) / tf.log(tf.cast(D, settings.float_type))
+        s = tf.cast(D, config.default_float()) / tf.math.log(tf.cast(D, config.default_float()))
     elif sparse_scale == 'sqrt':
-        s = tf.sqrt(tf.cast(D, settings.float_type))
+        s = tf.sqrt(tf.cast(D, config.default_float()))
 
     R = tf.reshape(_draw_n_sparse_gaussian_samples(rand_matrix_size, s, seed = seed), [D, rank_bound])
     
-    idx_result = tf.count_nonzero(R, axis=1) > 0
+    idx_result = tf.math.count_nonzero(R, axis=1) > 0
     idx_combined = tf.boolean_mask(combinations, idx_result, axis=0)
     n_nonzero = tf.shape(idx_combined)[0]
     A = tf.reshape(tf.gather(A, idx_combined[:,0], axis=-1), [-1, n_nonzero])
@@ -198,5 +196,5 @@ def lr_hadamard_prod_sparse(A, B, rank_bound, sparse_scale, seed = None):
     C = A * B
     R_nonzero = tf.boolean_mask(R, idx_result, axis=0)
     C = tf.matmul(C, R_nonzero)    
-    scale = tf.sqrt(s / tf.cast(rank_bound, settings.float_type))
+    scale = tf.sqrt(s / tf.cast(rank_bound, config.default_float()))
     return scale * tf.reshape(C, tf.concat((batch_shape, [rank_bound]), axis=0))
