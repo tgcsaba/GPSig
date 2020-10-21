@@ -40,7 +40,7 @@ def mmd_optimized(X,Y, kernel, verbose= False):
     g_opt=-1.0
     g_min, g_max = 10**(-10), 10**1
     
-    for g in np.logspace(-10,1,10):
+    for g in np.logspace(-10, 10, 20):
         K_XX = kernel(X,X,g)
         K_XY = kernel(X,Y,g)
         K_YY = kernel(Y,Y,g)

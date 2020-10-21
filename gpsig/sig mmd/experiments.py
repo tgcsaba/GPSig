@@ -29,10 +29,18 @@ then in each repeition we pad them randomly to turn into same lenght so that the
 
 """
 
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+
+import tensorflow as tf
+gpus = tf.config.list_physical_devices('GPU')
+if len(gpus) > 0:
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
 
 import numpy as np
 import matplotlib.pyplot as plt
-from get_data import data_randomwalk,data_shiftedNormal,data_signal, list2array, data_UEA, multTS_hard, pad_with_time_change
+from get_data import data_randomwalk, data_shiftedNormal, data_signal, list2array, data_UEA, multTS, multTS_hard, pad_with_time_change
 from hotelling import t_statistic
 from WaldWolfowitz import ww_test
 from classic_kernels import rbf_mmd, laplace_mmd
@@ -40,6 +48,8 @@ from functools import partial
 import os
 import pandas as pd
 import time
+
+from kernels_new import mmd_max_lin, mmd_max_rbf, mmd_max_laplace, perm_test_lin, perm_test_rbf, perm_test_laplace, mmd_max_sig_lin, mmd_max_sig_rbf, mmd_max_sig_laplace, perm_test_sig_lin, perm_test_sig_rbf, perm_test_sig_laplace
 
 
 from scipy.spatial.distance import squareform, pdist, cdist
@@ -96,6 +106,8 @@ def two_sample_permutation_test(test_statistic, X, Y, num_permutations):
             Z = np.hstack((X,Y))
         elif X.ndim == 2:
             Z = np.vstack((X,Y))
+        elif X.ndim == 3:
+            Z = np.concatenate((X, Y), axis=0)
             
         # IMPLEMENT: permute samples and compute test statistic
         perm_inds = np.random.permutation(len(Z))
@@ -136,11 +148,14 @@ if __name__ == '__main__':
     
     datasets_all = {**datasets_synthetic, **datasets_UEA}
     
-    statistics = dict([('Hotelling t statistic', t_statistic),
-                       ('Wald-Wolfowitz statistic', ww_test),
-                       ('MMD RBF', rbf_mmd),
-                       ('MMD Laplace', laplace_mmd)
-                     #  ('MMD Signature', )
+    statistics = dict([('Hotelling t statistic', (t_statistic,)),
+                       ('Wald-Wolfowitz statistic', (ww_test,)),
+                       ('MMD Lin', (mmd_max_lin, perm_test_lin)),
+                       ('MMD RBF', (mmd_max_rbf, perm_test_rbf)),
+                       ('MMD Laplace', (mmd_max_laplace, perm_test_laplace)),
+                       ('MMD Sig Lin', (mmd_max_sig_lin, perm_test_sig_lin)),
+                       ('MMD Sig RBF', (mmd_max_sig_rbf, perm_test_sig_rbf)),
+                       ('MMD Sig Lap', (mmd_max_sig_laplace, perm_test_sig_laplace))
                        ])
 
     num_permutations=100
@@ -166,10 +181,11 @@ if __name__ == '__main__':
         print("Dataset: ", dataset)
         
         #get list of numpy arrays
-        X,Y, U, V = datasets[dataset](50)
+        X, Y, U, V = datasets[dataset](50)
+        
         X_samples, Y_samples, U_samples, V_sampels = len(X), len(Y), len(U), len(V)
- 
-        #reduce to maximal dimensions (otherwise too slow)
+        
+        
         X=[ts[0:TS_max_len,0:TS_max_dim] for ts in X]
         Y=[ts[0:TS_max_len,0:TS_max_dim] for ts in Y]
         U=[ts[0:TS_max_len,0:TS_max_dim] for ts in U]
@@ -185,7 +201,7 @@ if __name__ == '__main__':
         for repetition in range(repetitions):
             start = time.time()
             print('Repetition', repetition+1, '/',repetitions)
-            #perturb with random time change
+            # perturb with random time change
             length =  2*max([max([ts.shape[0] for ts in A]) for A in [X,Y,U,V]])
             state_space_dimension=X[0].shape[1]
             X_padded, Y_padded, U_padded, V_padded = pad_with_time_change(X, length), pad_with_time_change(Y, length), pad_with_time_change(U, length), pad_with_time_change(V, length)        
@@ -199,17 +215,16 @@ if __name__ == '__main__':
                 
                 #print("Statistic: ",statistic)
                 
-                if statistic != 'MMD signature':
-                    
+                if 'MMD Sig' not in statistic:
                     #for non-signature kernels data is just a (samples, dim) array
                     X_,Y_ = X_array, Y_array
                     U_,V_ = U_array, V_array
-                    
                 else:
                     X_,Y_ = X,Y
                     U_,V_ = U,V
+                   
                 
-                s=statistics[statistic]
+                s=statistics[statistic][0]
                 
                 hypothesis=dict([('H0', (X_,Y_)), ('H1', (U_,V_))])
                 
@@ -219,14 +234,15 @@ if __name__ == '__main__':
                     
                     A, B = hypothesis[hyp][0],  hypothesis[hyp][1]
                     
-                    hist=two_sample_permutation_test(s, A,B, num_permutations)
-                    
-                    plt_title= dataset+' with '+statistic + ' under ' + hyp
-                   
-                    statistic_eval = s(A,B)   
-                    
-                    #uncomment to save a plot of permuation
-                   # perc_Low, perc_High = plot_permutation_samples(hist,plt_title, statistic_eval)
+                    if len(statistics[statistic]) == 1:
+                        hist=two_sample_permutation_test(s, A,B, num_permutations)
+                        statistic_eval = s(A,B)   
+                    else:
+                        hist,statistic_eval=statistics[statistic][1](A,B, num_permutations)   
+                        
+                    # uncomment to save a plot of permuation
+                    # plt_title= dataset+' with '+statistic + ' under ' + hyp
+                    # perc_Low, perc_High = plot_permutation_samples(hist,plt_title, statistic_eval)
                    
                     perc_Low, perc_High = np.percentile(hist, 2.5), np.percentile(hist, 97.5)
                     
@@ -247,7 +263,7 @@ if __name__ == '__main__':
                             print("Failure: H1 but ",statistic_eval,' is not between percentile (',perc_Low, ',',perc_High,')')
                             success=False
                     
-                    df.loc[experiment,['Success','X samples', 'Y samples', 'Statistic', 'Percentile low', 'Percentile high', '(Padded) Length', 'Dimension']]=[success,A.shape[0],B.shape[0], statistic_eval, perc_Low, perc_High, length, state_space_dimension]
+                    df.loc[experiment,['Success','X samples', 'Y samples', 'Statistic', 'Percentile low', 'Percentile high', '(Padded) Length', 'Dimension']]=[success,len(A),len(B), statistic_eval, perc_Low, perc_High, length, state_space_dimension]
                     #df.loc[experiment,['Success','X samples', 'Y samples', 'Statistic', 'Percentile low', 'Percentile high', '(Padded) Length', 'Dimension']]=[success,A.shape[0],B.shape[0], [repetition,repetition*2], perc_Low, perc_High, length, state_space_dimension]
             print("finished in:",(time.time() - start), "seconds\n")
         
