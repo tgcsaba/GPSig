@@ -87,10 +87,12 @@ def plot_permutation_samples(null_samples, title, statistic=None):
 if __name__ == '__main__':
     
     num_permutations=100 #for the permutation statistics
-    repetitions = 2 #how often each experiment is repeated
-    m = 50 #number of samples 
-    TS_max_len=400 #length of time series
-    TS_max_dim=10 #max state space dimension
+    repetitions = 20 #how often each experiment is repeated
+    number_samples = [30, 70, 200] #number of samples  m
+    sequence_length = [10,100,200,500]
+    dimension = [5000]
+    
+    experiment_parameters = [ (m, TS_max_dim, TS_max_len) for m in number_samples for TS_max_dim in dimension for TS_max_len in sequence_length]
     
     #select datasets
     # datasets_UEA = dict([ (ts, data_UEA(ts)) for ts in multTS_hard])
@@ -116,11 +118,12 @@ if __name__ == '__main__':
     
     
     #setup experiments and prepare df to store results in
-    experiments = [(data, statistic, hypothesis, rep) for data in datasets for statistic in statistics.keys() for hypothesis in ['H0','H1'] for rep in range(repetitions)] 
-    df_ind=pd.MultiIndex.from_tuples(experiments, names=('Dataset', 'Statistic', 'Hypothesis', 'Repetition'))
-    df_columns=['Success', 'X samples', 'Y samples', 'Statistic', 'Percentile low', 'Percentile high', '(Padded) Length', 'Dimension']
-    df=pd.DataFrame(None, index=df_ind, columns = df_columns)
-    df=df.sort_index()
+    experiments = [(data, statistic, param) for data in datasets for statistic in statistics.keys() for param in experiment_parameters] 
+    
+    # df_ind=pd.MultiIndex.from_tuples(experiments, names=('Dataset', 'Statistic', 'Parameters'))
+    # df_columns=['Success', 'X samples', 'Y samples', 'Statistic', 'Percentile low', 'Percentile high', '(Padded) Length', 'Dimension']
+    # df=pd.DataFrame(None, index=df_ind, columns = df_columns)
+    # df=df.sort_index()
     
     
     #select what is recorded for each experiment
@@ -129,7 +132,8 @@ if __name__ == '__main__':
                                            for hyp in ['H0','H1']
                                            #for val in ['lower percenticle', 'higher percentile', 'statistic']
                                            ]
-    df_experiments = pd.DataFrame(None)
+    
+   # df_experiments = pd.DataFrame(None)
     results=dict([(k,np.nan) for k in result_keys])
     
     
@@ -146,95 +150,103 @@ if __name__ == '__main__':
         X_samples, Y_samples = len(X_all), len(Y_all)
         
         
-        #truncate every ts at max length
-        X=[ts[0:TS_max_len,0:TS_max_dim] for ts in X_all]
-        Y=[ts[0:TS_max_len,0:TS_max_dim] for ts in Y_all]
-   
-        
         #remove nan's in case there are any
         X_all = [ A[~np.isnan(A).any(axis=1)] for A in X_all]
         Y_all = [ A[~np.isnan(A).any(axis=1)] for A in Y_all]
         
-        for repetition in range(repetitions):
-            start = time.time()
-            print('Repetition', repetition+1, '/',repetitions)
+        for (m, TS_max_dim, TS_max_len) in experiment_parameters:
+            
+            #choose number of samples, sequence length, state space dimension
+            print('samples',m,'dimension', TS_max_dim, 'length', TS_max_len)
             
             
-            #select randomly (uniformly with replacement) some ts for the experiment
-            X, Y, Z = random.choices(X_all, k=m), random.choices(Y_all,k= m), random.choices(X_all,k=m)
-             
-            # perturb with random time change
-            length =  2*max([max([ts.shape[0] for ts in A]) for A in [X,Y,Z]])
-            state_space_dimension=X[0].shape[1]
-            X_padded, Y_padded, Z_padded = pad_with_time_change(X, length), pad_with_time_change(Y, length), pad_with_time_change(Z, length)      
-            print('Random time change produces sequences of length', length, 'evolving in', state_space_dimension,'coordinates')
-           
-    
+            #truncate every ts at max length and max state space dimension
+            X = [ts[0:TS_max_len,0:TS_max_dim] for ts in X_all]
+            Y = [ts[0:TS_max_len,0:TS_max_dim] for ts in Y_all]
+   
             
-            for statistic in statistics:
+            #repeat: select m samples from X,Y under H0 and under H1
+            #add random time change to pad to same length
+            for repetition in range(repetitions):
+                start = time.time()
+                print('Repetition', repetition+1, '/',repetitions)
                 
                 
-                if 'MMD Sig' not in statistic:
-                    #for non-signature kernels data is just a (samples, dim) array
-                    #turn list of np.arrays into (samples, flattened-dim) numpy array
-                    X_, Y_, Z_  = list2array(X_padded), list2array(Y_padded), list2array(Z_padded)
-                    
-                else:
-                    X_,Y_ = X,Y,Z
-                   
-                
-                s=statistics[statistic][0]
-                
-                #H0 same distributions mu=nu
-                #H1 different distributions mu != nu
-                hypothesis=dict([('H0', (X_,Z_)), ('H1', (X_,Y_))])
-                
-                for hyp in hypothesis:
-                    
-                    experiment=(dataset,statistic,hyp,repetition)
-                    print('Experiment:', experiment)
-                    
-                    A, B = hypothesis[hyp][0],  hypothesis[hyp][1]
-                    
-                    if len(statistics[statistic]) == 1:
-                        #huh: Csaba why this?
-                        hist=two_sample_permutation_test(s, A,B, num_permutations)
-                        statistic_eval = s(A,B)   
-                    else:
-                        hist,statistic_eval=statistics[statistic][1](A,B, num_permutations)   
-                        
-                    # uncomment to save a plot of permuation statistic
-                    # plt_title= dataset+' with '+statistic + ' under ' + hyp
-                    # perc_Low, perc_High = plot_permutation_samples(hist,plt_title, statistic_eval)
-                   
-                    perc_Low, perc_High = np.percentile(hist, 2.5), np.percentile(hist, 97.5)
-                    
-          
-                    if hyp=='H0': 
-                        #both sets of samples come from same distribution 
-                        if not(perc_Low <= statistic_eval <= perc_High):
-                            print("Success: H0 (mu=nu) and ",statistic_eval,' is in percentiles (',perc_Low, ',',perc_High,')')
-                            success=True
-                        else:
-                            print("Failure: H0 (mu=nu) but ",statistic_eval,' is not in percentiles (',perc_Low, ',',perc_High,')')
-                            success=False
-                        
-                    if hyp =='H1':
-                        #the sets of samples come from different distributions
-                        if (perc_Low <= statistic_eval <= perc_High):
-                            print("Failure: H1 (mu != nu) but ",statistic_eval,' is in percentiles (',perc_Low, ',',perc_High,')')
-                            success=False
-                        else:
-                            print("Success: H1 (mu != nu) and ",statistic_eval,' is not in percentiles (',perc_Low, ',',perc_High,')')
-                            success=True
-                    
-                    df.loc[experiment,['Success','X samples', 'Y samples', 'Statistic', 'Percentile low', 'Percentile high', '(Padded) Length', 'Dimension']]=[success,len(A),len(B), statistic_eval, perc_Low, perc_High, length, state_space_dimension]
-                    #df.loc[experiment,['Success','X samples', 'Y samples', 'Statistic', 'Percentile low', 'Percentile high', '(Padded) Length', 'Dimension']]=[success,A.shape[0],B.shape[0], [repetition,repetition*2], perc_Low, perc_High, length, state_space_dimension]
-            print("finished in:",(time.time() - start), "seconds\n")
+                #select randomly (uniformly with replacement) some ts for the experiment
+                X, Y, Z = random.choices(X, k=m), random.choices(Y, k= m), random.choices(X, k=m)
+            
+                # perturb with random time change
+                length =  2*max([max([ts.shape[0] for ts in A]) for A in [X,Y,Z]])
+                state_space_dimension=X[0].shape[1]
+                X_padded, Y_padded, Z_padded = pad_with_time_change(X, length), pad_with_time_change(Y, length), pad_with_time_change(Z, length)      
+                print('Random time change produces sequences of length', length, 'evolving in', state_space_dimension,'coordinates')
+               
         
-            
-        df.to_pickle("./df_results.pkl")  
-        print("saved to pkl:",dataset)
+                
+                for statistic in statistics:
+
+                    
+                    if 'MMD Sig' not in statistic:
+                        #for non-signature kernels data is just a (samples, dim) array
+                        #turn list of np.arrays into (samples, flattened-dim) numpy array
+                        X_, Y_, Z_  = list2array(X_padded), list2array(Y_padded), list2array(Z_padded)
+                        
+                    else:
+                        X_,Y_ = X,Y,Z
+                       
+                    
+                    s=statistics[statistic][0]
+                    
+                    #H0 same distributions mu=nu
+                    #H1 different distributions mu != nu
+                    hypothesis=dict([('H0', (X_,Z_)), ('H1', (X_,Y_))])
+                    
+                    for hyp in hypothesis:
+                        
+                        experiment=(dataset,statistic,hyp,repetition)
+                        print('Experiment:', experiment)
+                        
+                        A, B = hypothesis[hyp][0],  hypothesis[hyp][1]
+                        
+                        if len(statistics[statistic]) == 1:
+                            #huh: Csaba why this?
+                            hist=two_sample_permutation_test(s, A,B, num_permutations)
+                            statistic_eval = s(A,B)   
+                        else:
+                            hist,statistic_eval=statistics[statistic][1](A,B, num_permutations)   
+                            
+                        # uncomment to save a plot of permuation statistic
+                        # plt_title= dataset+' with '+statistic + ' under ' + hyp
+                        # perc_Low, perc_High = plot_permutation_samples(hist,plt_title, statistic_eval)
+                       
+                        perc_Low, perc_High = np.percentile(hist, 2.5), np.percentile(hist, 97.5)
+                        
+                        
+                        if hyp=='H0': 
+                            #both sets of samples come from same distribution 
+                            if not(perc_Low <= statistic_eval <= perc_High):
+                                print("Success: H0 (mu=nu) and ",statistic_eval,' is in percentiles (',perc_Low, ',',perc_High,')')
+                                success=True
+                            else:
+                                print("Failure: H0 (mu=nu) but ",statistic_eval,' is not in percentiles (',perc_Low, ',',perc_High,')')
+                                success=False
+                            
+                        if hyp =='H1':
+                            #the sets of samples come from different distributions
+                            if (perc_Low <= statistic_eval <= perc_High):
+                                print("Failure: H1 (mu != nu) but ",statistic_eval,' is in percentiles (',perc_Low, ',',perc_High,')')
+                                success=False
+                            else:
+                                print("Success: H1 (mu != nu) and ",statistic_eval,' is not in percentiles (',perc_Low, ',',perc_High,')')
+                                success=True
+                        
+                       
+                        #df.loc[experiment,['Success','X samples', 'Y samples', 'Statistic', 'Percentile low', 'Percentile high', '(Padded) Length', 'Dimension']]=[success,A.shape[0],B.shape[0], [repetition,repetition*2], perc_Low, perc_High, length, state_space_dimension]
+                print("finished in:",(time.time() - start), "seconds\n")
+                #df.loc[experiment,['Success','X samples', 'Y samples', 'Statistic', 'Percentile low', 'Percentile high', '(Padded) Length', 'Dimension']]=[success,len(A),len(B), statistic_eval, perc_Low, perc_High, length, state_space_dimension]
+                
+            # df.to_pickle("./df_results.pkl")  
+            # print("saved to pkl:",dataset)
         
     #pd.read_pickle("df_results.pk")
  #alt=df.loc[('EthanolConcentration', 'Hotelling t statistic', 'H1'),'Statistic']  
