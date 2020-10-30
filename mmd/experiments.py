@@ -87,8 +87,7 @@ def plot_permutation_samples(null_samples, title, statistic=None):
 if __name__ == '__main__':
     
     num_permutations=100 #for the permutation statistics
-    repetitions = 1 #how often each experiment is repeated
-    repetitions_inv = 1.0/repetitions
+    repetitions = 25 #how often each experiment is repeated
     number_samples = [30, 70, 200] #number of samples  m
     sequence_length = [10,100,200,500]
     dimension = [5000]
@@ -248,13 +247,10 @@ if __name__ == '__main__':
                        
                         # [success,A.shape[0],B.shape[0], [repetition,repetition*2], perc_Low, perc_High, length, state_space_dimension]
                 print("finished in:",(time.time() - start), "seconds\n")
-                #df.loc[experiment,['Success','X samples', 'Y samples', 'Statistic', 'Percentile low', 'Percentile high', '(Padded) Length', 'Dimension']]=[success,len(A),len(B), statistic_eval, perc_Low, perc_High, length, state_space_dimension]
-             
+                
+        df.to_pickle("./df_results.pkl")  #save after each dataset in case sth crashes
+
     df = df.div(repetitions)
     df.to_pickle("./df_results.pkl")  
     print("saved to pkl:",dataset)
-        
-    #pd.read_pickle("df_results.pk")
- #alt=df.loc[('EthanolConcentration', 'Hotelling t statistic', 'H1'),'Statistic']  
- #plt.hist([list(null),list(alt)],label=['H0', 'H1']), plt.legend(loc='upper right')
-# df.loc[('EthanolConcentration', 'Hotelling t statistic', 'H1'),['Percentile low','Dimension']]
+    
