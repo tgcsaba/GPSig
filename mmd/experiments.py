@@ -87,7 +87,8 @@ def plot_permutation_samples(null_samples, title, statistic=None):
 if __name__ == '__main__':
     
     num_permutations=100 #for the permutation statistics
-    repetitions = 20 #how often each experiment is repeated
+    repetitions = 1 #how often each experiment is repeated
+    repetitions_inv = 1.0/repetitions
     number_samples = [30, 70, 200] #number of samples  m
     sequence_length = [10,100,200,500]
     dimension = [5000]
@@ -120,12 +121,13 @@ if __name__ == '__main__':
     #setup experiments and prepare df to store results in
     experiments = [(data, statistic, param) for data in datasets for statistic in statistics.keys() for param in experiment_parameters] 
     
-    # df_ind=pd.MultiIndex.from_tuples(experiments, names=('Dataset', 'Statistic', 'Parameters'))
-    # df_columns=['Success', 'X samples', 'Y samples', 'Statistic', 'Percentile low', 'Percentile high', '(Padded) Length', 'Dimension']
-    # df=pd.DataFrame(None, index=df_ind, columns = df_columns)
-    # df=df.sort_index()
+    df_ind=pd.MultiIndex.from_tuples(experiments, names=('Dataset', 'Statistic', 'Parameters'))
+    df_columns=['false reject', 'false accept']
     
-    
+    df=pd.DataFrame(None, index=df_ind, columns = df_columns)
+    df=df.sort_index()
+    df[:]=0
+        
     #select what is recorded for each experiment
     result_keys = [data +','+ stat +','+ hyp for data in datasets 
                                            for stat in statistics 
@@ -154,10 +156,13 @@ if __name__ == '__main__':
         X_all = [ A[~np.isnan(A).any(axis=1)] for A in X_all]
         Y_all = [ A[~np.isnan(A).any(axis=1)] for A in Y_all]
         
-        for (m, TS_max_dim, TS_max_len) in experiment_parameters:
+        for params in experiment_parameters:
+            
+            m, TS_max_dim, TS_max_len = params
+          
             
             #choose number of samples, sequence length, state space dimension
-            print('samples',m,'dimension', TS_max_dim, 'length', TS_max_len)
+            print('Samples',m,'Dimension <=', TS_max_dim, 'Length', TS_max_len)
             
             
             #truncate every ts at max length and max state space dimension
@@ -226,27 +231,28 @@ if __name__ == '__main__':
                             #both sets of samples come from same distribution 
                             if not(perc_Low <= statistic_eval <= perc_High):
                                 print("Success: H0 (mu=nu) and ",statistic_eval,' is in percentiles (',perc_Low, ',',perc_High,')')
-                                success=True
                             else:
                                 print("Failure: H0 (mu=nu) but ",statistic_eval,' is not in percentiles (',perc_Low, ',',perc_High,')')
-                                success=False
-                            
+                                df.loc[(dataset, statistic, params)]['false reject']+= 1.0
+
                         if hyp =='H1':
                             #the sets of samples come from different distributions
                             if (perc_Low <= statistic_eval <= perc_High):
                                 print("Failure: H1 (mu != nu) but ",statistic_eval,' is in percentiles (',perc_Low, ',',perc_High,')')
-                                success=False
                             else:
                                 print("Success: H1 (mu != nu) and ",statistic_eval,' is not in percentiles (',perc_Low, ',',perc_High,')')
-                                success=True
-                        
+                                df.loc[(dataset, statistic, params)]['false accept']+= 1.0
+                            
+
+                               # df.loc[(dataset, params, statistic),['H0 falsely accepted']] +=1
                        
-                        #df.loc[experiment,['Success','X samples', 'Y samples', 'Statistic', 'Percentile low', 'Percentile high', '(Padded) Length', 'Dimension']]=[success,A.shape[0],B.shape[0], [repetition,repetition*2], perc_Low, perc_High, length, state_space_dimension]
+                        # [success,A.shape[0],B.shape[0], [repetition,repetition*2], perc_Low, perc_High, length, state_space_dimension]
                 print("finished in:",(time.time() - start), "seconds\n")
                 #df.loc[experiment,['Success','X samples', 'Y samples', 'Statistic', 'Percentile low', 'Percentile high', '(Padded) Length', 'Dimension']]=[success,len(A),len(B), statistic_eval, perc_Low, perc_High, length, state_space_dimension]
-                
-            # df.to_pickle("./df_results.pkl")  
-            # print("saved to pkl:",dataset)
+             
+    df = df.div(repetitions)
+    df.to_pickle("./df_results.pkl")  
+    print("saved to pkl:",dataset)
         
     #pd.read_pickle("df_results.pk")
  #alt=df.loc[('EthanolConcentration', 'Hotelling t statistic', 'H1'),'Statistic']  
