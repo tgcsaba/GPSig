@@ -38,40 +38,38 @@ def normalize_data(X, Y=None):
         X = [scaler.transform(x) for x in X]
         return X
 
-def preprocess_data_for_sig_kernel(X, Y=None, normalize=False):
+# def preprocess_data(X, Y=None, normalize=False):
+#     X = list(X)
+#     num_X = len(X)
+#     if Y is not None:
+#         Y = list(Y)
+#         if normalize:
+#             X, Y = normalize_data(X, Y)
+#         num_Y = len(Y)
+#         X, Y = np.split(pad_list_of_sequences(X + Y), [num_X])
+#     else:
+#         if normalize:
+#             X = normalize_data(X)
+#         X = pad_list_of_sequences(X)
+    
+#     len_examples = X.shape[1]
+#     num_features = X.shape[2]
+    
+#     X = np.reshape(X, [num_X, -1])
+#     if Y is not None:
+#         Y = np.reshape(Y, [num_Y, -1])
+#         return X, Y, len_examples, num_features
+#     else:
+#         return X, len_examples, num_features
+
+def preprocess_data(X, Y=None, normalize=False, tabulation=None):
     X = list(X)
     num_X = len(X)
+    
     if Y is not None:
         Y = list(Y)
         if normalize:
             X, Y = normalize_data(X, Y)
-        num_Y = len(Y)
-        X, Y = np.split(pad_list_of_sequences(X + Y), [num_X])
-    else:
-        if normalize:
-            X = normalize_data(X)
-        X = pad_list_of_sequences(X)
-    
-    len_examples = X.shape[1]
-    num_features = X.shape[2]
-    
-    X = np.reshape(X, [num_X, -1])
-    if Y is not None:
-        Y = np.reshape(Y, [num_Y, -1])
-        return X, Y, len_examples, num_features
-    else:
-        return X, len_examples, num_features
-
-def preprocess_data_for_vector_kernel(X, Y=None, normalize=False, tabulation='interp'):
-    X = list(X)
-    if normalize:
-        X = normalize_data(X)
-    num_X = len(X)
-    
-    if Y is not None:
-        Y = list(Y)
-        if normalize:
-            Y = normalize_data(Y)    
         num_Y = len(Y)
         if tabulation == 'interp':
             X, Y = np.split(interp_list_of_sequences(X + Y), [num_X])
@@ -79,20 +77,24 @@ def preprocess_data_for_vector_kernel(X, Y=None, normalize=False, tabulation='in
             X, Y = np.split(pad_list_of_sequences(X + Y), [num_X])
         elif tabulation == 'zeropad':
             X, Y = np.split(pad_list_of_sequences(X + Y, pad_with=0.), [num_X])
-    else:    
+        X, Y = np.asarray(X), np.asarray(Y)
+    else:
+        if normalize:
+            X = normalize_data(X)
         if tabulation == 'interp':
             X = interp_list_of_sequences(X)
         elif tabulation == 'obspad':
             X = pad_list_of_sequences(X)
         elif tabulation == 'zeropad':
             X = pad_list_of_sequences(X, pad_with=0.)
-        
+        X = np.asarray(X)
+    
     len_examples = X.shape[1]
     num_features = X.shape[2]
-    
-    X = np.reshape(X, [num_X, -1])
+
+    X = X.reshape([num_X, -1])
     if Y is not None:
-        Y = np.reshape(Y, [num_Y, -1])
+        Y = Y.reshape([num_Y, -1])    
         return X, Y, len_examples, num_features
     else:
         return X, len_examples, num_features
@@ -127,10 +129,10 @@ def compute_kernel_in_batches(kernel_fn, X, Y, batch_size=None):
         num_X, num_Y = X.shape[0], Y.shape[0]
         K = np.zeros((num_X, num_Y))
         for i in range(int(np.ceil(float(num_X)/batch_size))):
-            lower_X, upper_X = i*batch_size, np.min((i+1)*batch_size)
+            lower_X, upper_X = i*batch_size, min((i+1)*batch_size, num_X)
             batch_X = X[lower_X:upper_X]
             for j in range(int(np.ceil(float(num_Y)/batch_size))):
-                lower_Y, upper_Y = j*batch_size, np.min((j+1)*batch_size)
+                lower_Y, upper_Y = j*batch_size, min((j+1)*batch_size, num_Y)
                 batch_Y = Y[lower_Y:upper_Y]
                 K[lower_X:upper_X, lower_Y:upper_Y] = kernel_fn(batch_X, batch_Y)
     else:
@@ -142,7 +144,7 @@ def compute_feature_in_batches(feature_fn, X, batch_size=100):
         num_X = X.shape[0]
         P = []
         for i in range(int(np.ceil(float(num_X)/batch_size))):
-            lower_X, upper_X = i*batch_size, np.min((i+1)*batch_size)
+            lower_X, upper_X = i*batch_size, min((i+1)*batch_size, num_X)
             batch_X = X[lower_X:upper_X]
             P.append(feature_fn(batch_X))
         P = np.concatenate(P, axis=0)
@@ -150,13 +152,16 @@ def compute_feature_in_batches(feature_fn, X, batch_size=100):
         P = feature_fn(X)
     return P
 
-def compute_other_kernel_matrices(kernel, X, Y=None, preprocess=False, tabulation='interp', normalize_data=False, normalize_kernel=False, batch_size=None, **kwargs):
+def compute_vector_kernel_matrices(kernel, X, Y=None, preprocess=True, tabulation=None, normalize_data=False, normalize_kernel=False, batch_size=None, **kwargs):
     
-    if isinstance(X, list) or len(np.unique([x.shape[0] for x in X])) > 1:
+    if not preprocess and normalize_data:
+        raise ValueError('Error: preprocessing must be enabled to normalize the data.')
+
+    if preprocess:
         if Y is not None:
-            X, Y, _, _ = preprocess_data_for_vector_kernel(X, Y, tabulation=tabulation, normalize=normalize_data)
+            X, Y, _, _ = preprocess_data(X, Y, tabulation=tabulation, normalize=normalize_data)
         else:
-            X, _, _ = preprocess_data_for_vector_kernel(X, tabulation=tabulation, normalize=normalize_data)
+            X, _, _ = preprocess_data(X, tabulation=tabulation, normalize=normalize_data)
     
     if isinstance(kernel, type(lambda x:x)):
         kernel_fn = lambda _X, _Y: kernel(_X, _Y, **kwargs)
@@ -188,9 +193,9 @@ def compute_gpsig_kernel_matrices(kernel, X, Y=None, low_rank=False, add_time=Fa
     
     if isinstance(X, list) or len(np.unique([x.shape[0] for x in X])) > 1:
         if Y is not None:
-            X, Y, len_examples, num_features = preprocess_data_for_sig_kernel(X, Y, normalize=normalize_data)
+            X, Y, len_examples, num_features = preprocess_data(X, Y, normalize=normalize_data, tabulation='obspad')
         else:
-            X, len_examples, num_features = preprocess_data_for_sig_kernel(X, normalize=normalize_data)
+            X, len_examples, num_features = preprocess_data(X, normalize=normalize_data, tabulation='obspad')
     else:
         len_examples, num_features = X[0].shape
 
@@ -235,7 +240,7 @@ def compute_kernel_matrices(kernel, X, Y=None, batch_size=None, **kwargs):
     if not isinstance(kernel, type(lambda x:x)) and issubclass(kernel, SignatureKernel):
         return compute_gpsig_kernel_matrices(kernel, X, Y, batch_size=batch_size, **kwargs)
     else:
-        return compute_other_kernel_matrices(kernel, X, Y, batch_size=batch_size, **kwargs)
+        return compute_vector_kernel_matrices(kernel, X, Y, batch_size=batch_size, **kwargs)
 
 
 ### MMD computations ###
@@ -298,8 +303,33 @@ def mmd_max(kernel, X, Y, params_grid, batch_size=None, verbose=False, name=None
 
 ### MMD-Max Permutation test ###
 
-def _mmd_max_permutation_test(compute_kernel_matrices, X, Y, params_grid, num_permutations):
+def _dict2key(p):
+    return tuple(sorted(p.items())) 
 
+def _precompute_kernel_matrices(compute_kernel_matrices, Z, params_grid, kernel_matrices=None, verbose=False):
+
+    if verbose:
+        params_grid = tqdm(params_grid, total=len(params_grid))
+     
+    # precompute kernel matrices for all parameter combinations (that are not already available)
+    kernel_matrices = kernel_matrices or {}
+    for i, p in enumerate(params_grid):
+        key = _dict2key(p) 
+        if key not in kernel_matrices:
+            kernel_matrices[key] = compute_kernel_matrices(Z, **p)
+
+    return kernel_matrices
+
+def precompute_kernel_matrices(kernel, Z, params_grid, batch_size=None, kernel_matrices=None, verbose=False):
+    return _precompute_kernel_matrices(partial(compute_kernel_matrices, kernel, batch_size=batch_size), Z, params_grid, kernel_matrices=kernel_matrices, verbose=verbose)
+    
+
+def mmd_max_permutation_test(kernel, X, Y, params_grid, num_permutations, batch_size=None, kernel_matrices=None, verbose=False):
+    
+    num_X = len(X)
+    num_Y = len(Y)
+    num_Z = num_X + num_Y
+    
     # assert X.ndim == Y.ndim
     # concatenate samples
     assert isinstance(X, list) == isinstance(Y, list)
@@ -307,36 +337,34 @@ def _mmd_max_permutation_test(compute_kernel_matrices, X, Y, params_grid, num_pe
         Z = X + Y
     else:
         Z = np.concatenate((X, Y), axis=0)
-     
+
     # precompute kernel matrices for all parmeter sets
-    kernel_matrices = []
-    for i, p in enumerate(params_grid): 
-        kernel_matrices.append(compute_kernel_matrices(Z, **p))
-        # print(kernel_matrices[i].shape)
+    kernel_matrices = precompute_kernel_matrices(kernel, Z, params_grid, batch_size=batch_size, kernel_matrices=kernel_matrices, verbose=verbose)
         
     statistics = np.zeros(num_permutations)
-    for i in range(num_permutations):
-        perm_inds = np.random.permutation(len(Z))
+    permutations = range(num_permutations)
+    if verbose:
+        permutations = tqdm(permutations)
+    for i in permutations:
+        perm_inds = np.random.permutation(num_Z)
         d_opt = -1
-        for j in range(len(params_grid)):
-            K_XX = kernel_matrices[j][np.ix_(perm_inds[:len(X)], perm_inds[:len(X)])]
-            K_XY = kernel_matrices[j][np.ix_(perm_inds[:len(X)], perm_inds[len(X):])]
-            K_YY = kernel_matrices[j][np.ix_(perm_inds[len(X):], perm_inds[len(X):])]
+        for j, p in enumerate(params_grid):
+            key = _dict2key(p)
+            K_XX = kernel_matrices[key][np.ix_(perm_inds[:num_X], perm_inds[:num_X])]
+            K_XY = kernel_matrices[key][np.ix_(perm_inds[:num_X], perm_inds[num_X:])]
+            K_YY = kernel_matrices[key][np.ix_(perm_inds[num_X:], perm_inds[num_X:])]
             d = quadratic_time_mmd(K_XX, K_XY, K_YY)
             if d > d_opt:
                 d_opt = d
         statistics[i] = d_opt
 
     d_opt = -1
-    for i in range(len(params_grid)):
-        K_XX = kernel_matrices[i][:len(X), :len(X)]
-        K_XY = kernel_matrices[i][:len(X), len(X):]
-        K_YY = kernel_matrices[i][len(X):, len(X):]
+    for i, p in enumerate(params_grid):
+        key = _dict2key(p)
+        K_XX = kernel_matrices[key][:num_X, :num_X]
+        K_XY = kernel_matrices[key][:num_X, num_X:]
+        K_YY = kernel_matrices[key][num_X:, num_X:]
         d = quadratic_time_mmd(K_XX, K_XY, K_YY)
         if d > d_opt:
             d_opt = d
     return statistics, d_opt
-
-def mmd_max_permutation_test(kernel, X, Y, params_grid, num_permutations, batch_size=None):
-    return _mmd_max_permutation_test(partial(compute_kernel_matrices, kernel, batch_size=batch_size), X, Y, params_grid, num_permutations)
-    

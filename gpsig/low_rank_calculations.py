@@ -50,9 +50,9 @@ def Nystrom_map(X, kern, nys_samples = None, rank_bound = None):
 
     # W += tf.diag(config.default_jitter()_level * tf.random.uniform([rank_bound], dtype=config.default_float()))
     # to get around some undeterminedness of the gradient in special cases
-    
+    W += config.default_jitter() * tf.eye(rank_bound, dtype=config.default_float())
     S, U = tf.linalg.eigh(W)
-    S += config.default_jitter() * tf.ones((rank_bound), dtype=config.default_float())
+    # S += config.default_jitter() * tf.ones((rank_bound), dtype=config.default_float())
     D = tf.sqrt(S)
 
     Kxy = kern(X, nys_samples)

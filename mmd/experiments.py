@@ -30,7 +30,7 @@ then in each repeition we pad them randomly to turn into same lenght so that the
 """
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 import tensorflow as tf
 gpus = tf.config.list_physical_devices('GPU')
@@ -40,7 +40,7 @@ if len(gpus) > 0:
 
 import numpy as np
 import matplotlib.pyplot as plt
-from get_data import data_randomwalk, data_shiftedNormal, data_signal, list2array, data_UEA, multTS, multTS_hard, pad_with_time_change
+from get_data import data_randomwalk, data_shiftedNormal, data_signal, list2array, data_UEA, multTS, multTS_hard, pad_with_time_change, subsample_datapoints
 from hotelling import t_statistic
 from WaldWolfowitz import ww_test
 from classic_kernels import rbf_mmd, laplace_mmd
@@ -51,6 +51,7 @@ import time
 
 from kernels_new import mmd_max_lin, mmd_max_rbf, mmd_max_laplace, perm_test_lin, perm_test_rbf, perm_test_laplace, mmd_max_sig_lin, mmd_max_sig_rbf, mmd_max_sig_laplace, perm_test_sig_lin, perm_test_sig_rbf, perm_test_sig_laplace
 
+from gpsig.preprocessing import interp_list_of_sequences
 
 from scipy.spatial.distance import squareform, pdist, cdist
 
@@ -58,6 +59,7 @@ from scipy.spatial.distance import squareform, pdist, cdist
 plot_folder=os.getcwd()+'/plots/'
 TS_max_len=100
 TS_max_dim=5
+TS_max_size=2
 
 def sq_distances(X,Y=None):
     """
@@ -181,30 +183,37 @@ if __name__ == '__main__':
         print("Dataset: ", dataset)
         
         #get list of numpy arrays
-        X, Y, U, V = datasets[dataset](50)
+        X_all, Y_all, U_all, V_all = datasets[dataset]()
         
-        X_samples, Y_samples, U_samples, V_sampels = len(X), len(Y), len(U), len(V)
-        
-        
-        X=[ts[0:TS_max_len,0:TS_max_dim] for ts in X]
-        Y=[ts[0:TS_max_len,0:TS_max_dim] for ts in Y]
-        U=[ts[0:TS_max_len,0:TS_max_dim] for ts in U]
-        V=[ts[0:TS_max_len,0:TS_max_dim] for ts in V]
+        X_all=[ts[0:TS_max_len,0:TS_max_dim] for ts in X_all]
+        Y_all=[ts[0:TS_max_len,0:TS_max_dim] for ts in Y_all]
+        U_all=[ts[0:TS_max_len,0:TS_max_dim] for ts in U_all]
+        V_all=[ts[0:TS_max_len,0:TS_max_dim] for ts in V_all]
 
         
         #remove nan's in case there are any
-        X = [ A[~np.isnan(A).any(axis=1)] for A in X]
-        Y = [ A[~np.isnan(A).any(axis=1)] for A in Y]
-        U = [ A[~np.isnan(A).any(axis=1)] for A in U]
-        V = [ A[~np.isnan(A).any(axis=1)] for A in V]
+        X_all = [ A[~np.isnan(A).any(axis=1)] for A in X_all]
+        Y_all = [ A[~np.isnan(A).any(axis=1)] for A in Y_all]
+        U_all = [ A[~np.isnan(A).any(axis=1)] for A in U_all]
+        V_all = [ A[~np.isnan(A).any(axis=1)] for A in V_all]
         
         for repetition in range(repetitions):
             start = time.time()
             print('Repetition', repetition+1, '/',repetitions)
+            
+            X = subsample_datapoints(X_all, TS_max_size)
+            Y = subsample_datapoints(Y_all, TS_max_size)
+            U = subsample_datapoints(U_all, TS_max_size)
+            V = subsample_datapoints(V_all, TS_max_size)
+            
             # perturb with random time change
-            length =  2*max([max([ts.shape[0] for ts in A]) for A in [X,Y,U,V]])
+            # length =  2*max([max([ts.shape[0] for ts in A]) for A in [X, Y, U, V]])
             state_space_dimension=X[0].shape[1]
-            X_padded, Y_padded, U_padded, V_padded = pad_with_time_change(X, length), pad_with_time_change(Y, length), pad_with_time_change(U, length), pad_with_time_change(V, length)        
+            # X_padded, Y_padded, U_padded, V_padded = pad_with_time_change(X, length), pad_with_time_change(Y, length), pad_with_time_change(U, length), pad_with_time_change(V, length) 
+            
+            X_samples, Y_samples, U_samples, V_samples = len(X), len(Y), len(U), len(V)
+            length =  max([max([ts.shape[0] for ts in A]) for A in [X, Y, U, V]])
+            X_padded, Y_padded, U_padded, V_padded = np.split(interp_list_of_sequences(X+Y+U+V), [X_samples, X_samples+Y_samples, X_samples+Y_samples+U_samples])
             
             #turn list of np.arrays into (samples, flattened-dim) numpy array
             X_array, Y_array  = list2array(X_padded), list2array(Y_padded)
