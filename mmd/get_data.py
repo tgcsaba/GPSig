@@ -69,7 +69,7 @@ multTS_hard=[
 
    
 
-def data_UEA(name, N):
+def data_UEA(name):
     """
 
 
@@ -77,9 +77,7 @@ def data_UEA(name, N):
     ----------
     dataset_name : string
         DESCRIPTION. One of the names of the time series specified in multTS
-    
-    N: number of time series 
-    
+        
     null: Boolean, optional
         DESCRIPTION. if null==True then all time series returned have the same label (0)
                      if null==False then X contains time series labelled 0 and Y the ones labelled 1
@@ -87,10 +85,10 @@ def data_UEA(name, N):
 
     Returns
     -------
-    X, Y : list of length N (or less if less than N samples in dataset) 
+    X, Y : list of length N (or less if <N samples in dataset) 
                 the i-th list entry is a (len_i,dim) numpy array
-        DESCRIPTION. X are the TS labelled with 0, Y are the TS labelled with 1   
-    U, V :
+        DESCRIPTION. X are the TS labelled with 0, Y are the TS labelled with 1
+ 
 
     """
     
@@ -112,15 +110,16 @@ def data_UEA(name, N):
     X=[data[i] for i in range(len(labels)) if labels[i]==0]
     Y=[data[i] for i in range(len(labels)) if labels[i]==1]
     
-    
-    data=[data[i] for i in range(len(labels)) if (labels[i]==0 or labels[i]==1)]
-    labels = [labels[i] for i in range(len(labels)) if (labels[i]==0 or labels[i]==1)]
-    sss= StratifiedShuffleSplit(n_splits=1, test_size=0.5, random_state=0)
-    labels_tr, labels_te = next(sss.split(data, labels))
-    U=[data[i] for i in labels_tr]
-    V=[data[i] for i in labels_te]
 
-    return X[:N], Y[:N], U[:N], V[:N]
+    # #Randomly select labels 
+    # data=[data[i] for i in range(len(labels)) if (labels[i]==0 or labels[i]==1)]
+    # labels = [labels[i] for i in range(len(labels)) if (labels[i]==0 or labels[i]==1)]
+    # sss= StratifiedShuffleSplit(n_splits=1, test_size=0.5, random_state=0)
+    # labels_tr, labels_te = next(sss.split(data, labels))
+    # U=[data[i] for i in labels_tr]
+    # V=[data[i] for i in labels_te]
+
+    return X,Y
 
 def time_change(X, new):
     """
