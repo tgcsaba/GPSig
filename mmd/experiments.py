@@ -171,15 +171,15 @@ if __name__ == '__main__':
                 X, Y, Z = random.choices(X, k=m), random.choices(X, k= m), random.choices(X, k=m) ##CAREFFUL CCHANGED Y
             
                 # perturb with random time change
-                length =  20*max([max([ts.shape[0] for ts in A]) for A in [X,Y,Z]])
+                length =  2*max([max([ts.shape[0] for ts in A]) for A in [X,Y,Z]])
                 state_space_dimension=X[0].shape[1]
                 X_padded, Y_padded, Z_padded = pad_with_time_change(X, length), pad_with_time_change(Y, length), pad_with_time_change(Z, length)      
                 print('Random time change produces sequences of length', length, 'evolving in', state_space_dimension,'coordinates')
                
                 #increase SNR to make it harder
-                X_padded = [seq_reverse(seq_normalize(x)) for x in X_padded]
-                Y_padded = [seq_double(seq_normalize(x)) for x in Y_padded]
-                Z_padded = [seq_reverse(seq_normalize(x)) for x in Z_padded]
+                # X_padded = [seq_reverse(seq_normalize(x)) for x in X_padded]
+                # Y_padded = [seq_double(seq_normalize(x)) for x in Y_padded]
+                # Z_padded = [seq_reverse(seq_normalize(x)) for x in Z_padded]
                 
                 # Y_padded = [ts + 1000*np.random.rand(length,state_space_dimension) for ts in Y_padded]
                 # Z_padded = [ts + 1000*np.random.rand(length,state_space_dimension) for ts in Z_padded]
