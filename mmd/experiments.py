@@ -2,35 +2,25 @@
 # -*- coding: utf-8 -*-
 """
 Benchmark Two-sample tests for time series data
-
 H0: \mu \eq \nu
 H1: \mu \neq \nu
-
 where \mu,\nu are the probability measure of multi-variate time-series
-
 for each dataset repeat the following repetition(=100) times:
     
 Uniformly select m samples from (X,Y) under H0
 Uniformly select m samples from (X,Y) under H1
-
 Process the each time series as follows:
-
 * Random time change until they have the same length
     If it's longer than L trunacte at length TS_max_len
     If it's shorter than L randomly select a sequence index and double it, repeat until it's of length TS_max_len
-
 ** Maximal state space dimension
     If the state space of the time-series is bigger than TS_max_len use only the first TS_max_len entries
-
 We denote the resulting data sample_0 and sample_0
 each is a collection of m time series X and m time series Y
-
 Do a permutation test for each test statistic:
     calculate T(X,Y) and compare it to the distribution of T(pi(X,Y)) when pi is a uniformly at random choosen permutation
     if T(X,Y) is inside the 95% quantile accept, otherwise reject
-
 Do the above for various values of m, TS_max_len, TS_max_dim to study the influence of sample size, time series length, and state space dimension
-
 Datasets:
 We use labelled time series data
 We only use two different labels, say {A,B}, and ignore the rest of the data if there are more than two labels
@@ -271,4 +261,3 @@ if __name__ == '__main__':
     df = df.div(repetitions)
     df.to_pickle("./df_results.pkl")  
     print("saved to pkl:",dataset)
-    

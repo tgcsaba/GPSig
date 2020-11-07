@@ -1,23 +1,46 @@
+import warnings
 import numpy as np
 from functools import partial
 from tqdm import tqdm
 from scipy.interpolate import interp1d
 
-def pad_sequence(max_length, pre, seq):
+def pad_sequence(max_len, pre, seq):
     """
     Takes as input a target length and a multi-dimensional sequence and pads it with repeating the last or first element until target length is reached.
     # Input
-    :max_length:    an integer such that len_examples <= max_length
+    :max_len:    an integer such that len_examples <= max_len
     :sequence:      a sequence of shape (len_examples, num_features)
     # Output
-    a sequence of shape (max_length, num_features) by repeating the last element
+    a sequence of shape (max_len, num_features) by repeating the last element
     """
     if bool(pre):
-        return np.concatenate((np.tile(seq[0], [max_length - seq.shape[0], 1]), seq), axis = 0)
+        return np.concatenate((np.tile(seq[0], [max_len - seq.shape[0], 1]), seq), axis = 0)
     else:
-        return np.concatenate((seq, np.tile(seq[-1], [max_length - seq.shape[0], 1])), axis = 0)
+        return np.concatenate((seq, np.tile(seq[-1], [max_len - seq.shape[0], 1])), axis = 0)
+    
+def rand_proj_sequences(X, target_dim):
+    if X[0].ndim == 1:
+        warnings.warn('Warning: sequences seem to be flattened, assuming \'num_features=1\', behaviour may not be as expected.')
+        num_features = 1
+        X = [x.reshape([-1, 1]) for x in X]
+    elif X[0].ndim == 2:
+        num_features = X[0].shape[1]
+        if not np.all([x.shape[1] == num_features for x in X]):
+            raise ValueError('Error: supplied list of sequences contain different path dimensions.')
+    else:
+        raise ValueError('Error: supplied list of sequences should contain each sequence as a 2-dimensional array.')
+    
+    if num_features <= target_dim:
+        warnings.warn('Warning: path dimensions are already <= than supplied target dimension, it seems like there\'s nothing to do here.')
+        return X
 
-def interp_list_of_sequences(sequences_list, orient_ax = 0):
+    A = 1. / np.sqrt(target_dim) * np.random.randn(num_features, target_dim)
+
+    X = [x @ A for x in X]
+
+    return X
+
+def interp_list_of_sequences(sequences_list, orient_ax=0, max_len=None, shorten_only=False):
     """
     """
     # First check whether sequence are of the right format
@@ -35,11 +58,13 @@ def interp_list_of_sequences(sequences_list, orient_ax = 0):
         raise ValueError('Different path dimensions found. Please preprocess sequences beforehand so that all paths contain the same number of features.')
     num_features = num_features[0]
     
-    max_length = np.max([sequence.shape[orient_ax] for sequence in sequences_list])
+    if max_len is not None:
+        max_len = min(max_len, np.max([sequence.shape[orient_ax] for sequence in sequences_list]))
+    else:
+        max_len = np.max([sequence.shape[orient_ax] for sequence in sequences_list])
 
-    t_q = np.arange(max_length) / (max_length - 1.)
-    
-    interpolated = np.stack([interp1d(np.arange(sequence.shape[0]) / (sequence.shape[0] - 1.), sequence, axis=0)(t_q) for sequence in sequences_list], axis=0)
+    t_q = np.arange(max_len) / (max_len - 1.)
+    interpolated = np.stack([interp1d(np.arange(sequence.shape[0]) / (sequence.shape[0] - 1.), sequence, axis=0)(t_q) for sequence in sequences_list if not shorten_only or sequence.shape[0] > max_len], axis=0)
 
     return interpolated
 
@@ -70,15 +95,15 @@ def pad_list_of_sequences(sequences_list, orient_ax = 0, pad_with = None, pre=Tr
         raise ValueError('Different path dimensions found. Please preprocess sequences beforehand so that all paths contain the same number of features.')
     num_features = num_features[0]
     
-    max_length = np.max([sequence.shape[orient_ax] for sequence in sequences_list])
+    max_len = np.max([sequence.shape[orient_ax] for sequence in sequences_list])
     
     if pad_with is None:
-        pad_these_sequence = partial(pad_sequence, max_length, pre)
+        pad_these_sequence = partial(pad_sequence, max_len, pre)
     else:
         if pre:
-            pad_these_sequence = lambda x: np.concatenate((np.full((max_length - x.shape[0], x.shape[1]), float(pad_with)), x), axis=0)
+            pad_these_sequence = lambda x: np.concatenate((np.full((max_len - x.shape[0], x.shape[1]), float(pad_with)), x), axis=0)
         else:
-            pad_these_sequence = lambda x: np.concatenate((x, np.full((max_length - x.shape[0], x.shape[1]), float(pad_with))), axis=0)
+            pad_these_sequence = lambda x: np.concatenate((x, np.full((max_len - x.shape[0], x.shape[1]), float(pad_with))), axis=0)
 
     num_sequences = len(sequences_list)
     
@@ -107,13 +132,13 @@ def add_time_to_sequence(sequence):
 
 def add_time_to_table(sequences_array, num_features = None):
     """
-    Takes as input a table of tabulated sequences as a size (num_paths, num_features * max_length) numpy array and adds time as an extra coordinate,
+    Takes as input a table of tabulated sequences as a size (num_paths, num_features * max_len) numpy array and adds time as an extra coordinate,
     taking into consideration possible repeated elements at the end of each sequence.
     # Input
-    :sequences_array:           A table of tabulated sequences of size (num_paths, num_features * max_length)
+    :sequences_array:           A table of tabulated sequences of size (num_paths, num_features * max_len)
     :num_features:              The number of sequence coordinates
     Output:
-    :sequences_array_with_time: A table of tabulated sequences of size (num_paths, (num_features + 1) * max_length)
+    :sequences_array_with_time: A table of tabulated sequences of size (num_paths, (num_features + 1) * max_len)
     """
     if sequences_array.ndim == 3:
         if num_features is None:
@@ -129,13 +154,13 @@ def add_time_to_table(sequences_array, num_features = None):
 
 def add_natural_parametrization_to_table(sequences_array, num_features = None):
     """
-    Takes as input a table of tabulated sequences as a size (num_paths, num_features * max_length) numpy array and
+    Takes as input a table of tabulated sequences as a size (num_paths, num_features * max_len) numpy array and
     adds the natural parametrization as an extra coordinate,
     # Input
-    :sequences_array:           A table of tabulated sequences of size (num_paths, num_features * max_length) or (num_paths, num_features, max_length)
+    :sequences_array:           A table of tabulated sequences of size (num_paths, num_features * max_len) or (num_paths, num_features, max_len)
     :num_features:              The number of sequence coordinates
     Output:
-    :sequences_array_with_time: A table of tabulated sequences of size (num_paths, (num_features + 1) * max_length)
+    :sequences_array_with_time: A table of tabulated sequences of size (num_paths, (num_features + 1) * max_len)
     """
     if sequences_array.ndim == 3:
         if num_features is None:
