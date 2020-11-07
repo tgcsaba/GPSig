@@ -9,6 +9,7 @@ from signal_vs_noise import signal
 from random_walks import rw1d,fake_rw1d
 from sktime.utils.load_data import load_from_arff_to_dataframe
 from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn import preprocessing
 import os
 
 
@@ -276,3 +277,30 @@ def pad_with_time_change(X, length_max):
         length = ts.shape[0]
         X_padded[i]=time_change(ts, length_max - length)
     return X_padded
+
+
+def seq_reverse(x):
+    """
+
+    Parameters
+    ----------
+    x : numpy array
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    return np.concatenate((x,x[::-1]))
+
+def seq_double(x):
+    
+    return np.concatenate((x,x))
+
+def seq_perm(x):
+    return np.random.permutation(x)
+
+def seq_normalize(x):
+    return preprocessing.normalize(x, norm='l2')

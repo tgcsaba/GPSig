@@ -58,6 +58,7 @@ from functools import partial
 import os
 import pandas as pd
 import time
+from get_data import seq_reverse, seq_perm, seq_double, seq_normalize
 
 from kernels_new import mmd_max_lin, mmd_max_rbf, mmd_max_laplace, perm_test_lin, perm_test_rbf, perm_test_laplace, mmd_max_sig_lin, mmd_max_sig_rbf, mmd_max_sig_laplace, perm_test_sig_lin, perm_test_sig_rbf, perm_test_sig_laplace
 
@@ -86,10 +87,10 @@ def plot_permutation_samples(null_samples, title, statistic=None):
 
 if __name__ == '__main__':
     
-    num_permutations=100 #for the permutation statistics
-    repetitions = 25 #how often each experiment is repeated
-    number_samples = [30, 70, 200] #number of samples  m
-    sequence_length = [10,100,200,500]
+    num_permutations=300 #for the permutation statistics
+    repetitions = 20 #how often each experiment is repeated
+    number_samples =[70]# [30, 70, 200] #number of samples  m
+    sequence_length = [30]#[10,100,200,500]
     dimension = [5000]
     
     experiment_parameters = [ (m, TS_max_dim, TS_max_len) for m in number_samples for TS_max_dim in dimension for TS_max_len in sequence_length]
@@ -176,16 +177,26 @@ if __name__ == '__main__':
                 print('Repetition', repetition+1, '/',repetitions)
                 
                 
-                #select randomly (uniformly with replacement) some ts for the experiment
-                X, Y, Z = random.choices(X, k=m), random.choices(Y, k= m), random.choices(X, k=m)
+                #select randomly (uniformly with replacement) m-many ts for the experiment
+                X, Y, Z = random.choices(X, k=m), random.choices(X, k= m), random.choices(X, k=m) ##CAREFFUL CCHANGED Y
             
                 # perturb with random time change
-                length =  2*max([max([ts.shape[0] for ts in A]) for A in [X,Y,Z]])
+                length =  20*max([max([ts.shape[0] for ts in A]) for A in [X,Y,Z]])
                 state_space_dimension=X[0].shape[1]
                 X_padded, Y_padded, Z_padded = pad_with_time_change(X, length), pad_with_time_change(Y, length), pad_with_time_change(Z, length)      
                 print('Random time change produces sequences of length', length, 'evolving in', state_space_dimension,'coordinates')
                
-        
+                #increase SNR to make it harder
+                X_padded = [seq_reverse(seq_normalize(x)) for x in X_padded]
+                Y_padded = [seq_double(seq_normalize(x)) for x in Y_padded]
+                Z_padded = [seq_reverse(seq_normalize(x)) for x in Z_padded]
+                
+                # Y_padded = [ts + 1000*np.random.rand(length,state_space_dimension) for ts in Y_padded]
+                # Z_padded = [ts + 1000*np.random.rand(length,state_space_dimension) for ts in Z_padded]
+                # Y_padded=X_padded
+                # Z_padded= X_padded
+
+
                 
                 for statistic in statistics:
 
@@ -208,7 +219,7 @@ if __name__ == '__main__':
                     for hyp in hypothesis:
                         
                         experiment=(dataset,statistic,hyp,repetition)
-                        print('Experiment:', experiment)
+                        #print('Experiment:', experiment)
                         
                         A, B = hypothesis[hyp][0],  hypothesis[hyp][1]
                         
@@ -228,19 +239,20 @@ if __name__ == '__main__':
                         
                         if hyp=='H0': 
                             #both sets of samples come from same distribution 
-                            if not(perc_Low <= statistic_eval <= perc_High):
-                                print("Success: H0 (mu=nu) and ",statistic_eval,' is in percentiles (',perc_Low, ',',perc_High,')')
+                            if (perc_Low <= statistic_eval <= perc_High):
+                                print("Success: (mu=nu) and ",statistic_eval,' is in percentiles (',perc_Low, ',',perc_High,')')
                             else:
-                                print("Failure: H0 (mu=nu) but ",statistic_eval,' is not in percentiles (',perc_Low, ',',perc_High,')')
+                                print("Failure: (mu=nu) but ",statistic_eval,' is not in percentiles (',perc_Low, ',',perc_High,')')
                                 df.loc[(dataset, statistic, params)]['false reject']+= 1.0
 
                         if hyp =='H1':
                             #the sets of samples come from different distributions
                             if (perc_Low <= statistic_eval <= perc_High):
-                                print("Failure: H1 (mu != nu) but ",statistic_eval,' is in percentiles (',perc_Low, ',',perc_High,')')
-                            else:
-                                print("Success: H1 (mu != nu) and ",statistic_eval,' is not in percentiles (',perc_Low, ',',perc_High,')')
+                                print("Failure: (mu != nu) but ",statistic_eval,' is in percentiles (',perc_Low, ',',perc_High,')')
                                 df.loc[(dataset, statistic, params)]['false accept']+= 1.0
+
+                            else:
+                                print("Success: (mu != nu) and ",statistic_eval,' is not in percentiles (',perc_Low, ',',perc_High,')')
                             
 
                                # df.loc[(dataset, params, statistic),['H0 falsely accepted']] +=1
@@ -248,7 +260,13 @@ if __name__ == '__main__':
                         # [success,A.shape[0],B.shape[0], [repetition,repetition*2], perc_Low, perc_High, length, state_space_dimension]
                 print("finished in:",(time.time() - start), "seconds\n")
                 
+            for s in statistics:
+                print('statistic ',s)
+                print('false rejects', df.loc[(dataset, s, params)]['false reject']/repetitions)
+                print('false accepts', df.loc[(dataset, s, params)]['false accept']/repetitions)
+                
         df.to_pickle("./df_results.pkl")  #save after each dataset in case sth crashes
+          
 
     df = df.div(repetitions)
     df.to_pickle("./df_results.pkl")  
