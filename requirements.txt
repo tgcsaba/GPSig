@@ -7,4 +7,4 @@ sktime==0.4.1
 tensorflow==1.15.3
 gpflow==1.5.1
 keras==2.3.1
-requests==2.24.0
+requests==2.31.0
